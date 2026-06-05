@@ -1,1 +1,37 @@
 general-ai-cli-pet-full-plan.md
+
+# Dependencies
+node_modules/
+
+# Build and test output
+dist/
+build/
+coverage/
+.nyc_output/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local environment and app state
+.env
+.env.*
+!.env.example
+.ai-pet/
+.gax/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp

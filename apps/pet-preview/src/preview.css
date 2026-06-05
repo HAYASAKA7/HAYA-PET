@@ -1,0 +1,125 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: #f7f3ea;
+  color: #1e272b;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(360px, 1fr) minmax(180px, 220px);
+  gap: 20px;
+  min-height: 100vh;
+  padding: 20px;
+}
+
+.toolbar,
+.meta-panel {
+  align-self: stretch;
+  border: 1px solid #c9c3b6;
+  background: #fffaf1;
+  padding: 14px;
+}
+
+.brand {
+  margin: 0 0 16px;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.file-input {
+  display: block;
+  margin-bottom: 14px;
+}
+
+.file-input span,
+.control-label {
+  display: block;
+  margin-bottom: 6px;
+  color: #4b5457;
+  font-size: 13px;
+}
+
+.file-input input {
+  width: 100%;
+}
+
+.action-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+
+.action-button,
+.play-button {
+  min-height: 34px;
+  border: 1px solid #7f8c84;
+  background: #f7f3ea;
+  color: #1e272b;
+  cursor: pointer;
+}
+
+.action-button.active,
+.play-button {
+  border-color: #245c63;
+  background: #2f6f73;
+  color: #ffffff;
+}
+
+.stage {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  overflow: auto;
+  border: 1px solid #c9c3b6;
+  background:
+    linear-gradient(45deg, #ded8cc 25%, transparent 25%),
+    linear-gradient(-45deg, #ded8cc 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #ded8cc 75%),
+    linear-gradient(-45deg, transparent 75%, #ded8cc 75%);
+  background-color: #f8f4ec;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+  background-size: 20px 20px;
+}
+
+canvas {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  image-rendering: pixelated;
+}
+
+.meta-panel {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+}
+
+.meta-value {
+  margin: 0;
+  font-size: 15px;
+}
+
+.scale-control input {
+  width: 100%;
+}
+
+@media (max-width: 840px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .stage {
+    min-height: 440px;
+  }
+}

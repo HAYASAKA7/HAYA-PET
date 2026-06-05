@@ -20,7 +20,18 @@ async function findTestFiles(dir) {
 }
 
 const root = fileURLToPath(new URL("..", import.meta.url));
-const testFiles = await findTestFiles(join(root, "packages"));
+const testRoots = ["packages", "apps"];
+const testFiles = [];
+
+for (const testRoot of testRoots) {
+  try {
+    testFiles.push(...await findTestFiles(join(root, testRoot)));
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      throw error;
+    }
+  }
+}
 
 for (const file of testFiles) {
   const displayPath = relative(root, file).split(sep).join("/");

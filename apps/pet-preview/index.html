@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Haya Pet Preview</title>
+    <link rel="stylesheet" href="./src/preview.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="toolbar" aria-label="Preview controls">
+        <h1 class="brand">Haya Pet Preview</h1>
+        <label class="file-input">
+          <span>Spritesheet</span>
+          <input id="spritesheet-file" type="file" accept="image/png,image/webp">
+        </label>
+        <div id="action-list" class="action-list" aria-label="Actions"></div>
+      </section>
+
+      <section class="stage" aria-label="Pet frame">
+        <canvas id="pet-canvas" width="384" height="416"></canvas>
+      </section>
+
+      <aside class="meta-panel" aria-label="Frame details">
+        <button id="play-toggle" class="play-button" type="button">Pause</button>
+        <label class="scale-control">
+          <span class="control-label">Scale</span>
+          <input id="scale" type="range" min="1" max="4" step="1" value="2">
+        </label>
+        <div>
+          <span class="control-label">Action</span>
+          <p id="action-meta" class="meta-value">idle</p>
+        </div>
+        <div>
+          <span class="control-label">Frame</span>
+          <p id="frame-meta" class="meta-value">frame 1 / 1</p>
+        </div>
+      </aside>
+    </main>
+    <script type="module" src="./src/preview-app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "name": "haya-pet",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Generic AI CLI pet runtime foundation.",
+  "scripts": {
+    "test": "node test/run-tests.mjs"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=16.20.0"
+  }
+}
