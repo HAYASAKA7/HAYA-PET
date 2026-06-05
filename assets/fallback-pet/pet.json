@@ -1,0 +1,13 @@
+{
+  "id": "fallback-pet",
+  "name": "Fallback Pet",
+  "spritesheet": "spritesheet.webp",
+  "cellWidth": 192,
+  "cellHeight": 208,
+  "frameDurationMs": 120,
+  "actionFrameDurations": {
+    "idle": 160,
+    "waving": 90,
+    "jumping": 90
+  }
+}

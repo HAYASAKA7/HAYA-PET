@@ -116,13 +116,26 @@ async function createMessageSender(dependencies) {
     env: dependencies.env,
     homeDir: dependencies.homeDir
   }).ipcEndpoint;
-  const client = await createIpcClient({ endpoint });
+
+  let client;
+  try {
+    client = await createIpcClient({ endpoint });
+  } catch {
+    // No daemon listening: still run the wrapped command and preserve its exit
+    // code. The pet simply will not reflect this session until the companion
+    // is running (plan section 39 — wrappers degrade gracefully).
+    return { send: noopSend, close: noopClose };
+  }
 
   return {
     send: (message) => client.send(message),
     close: () => client.close()
   };
 }
+
+async function noopSend() {}
+
+async function noopClose() {}
 
 if (isDirectRun(import.meta.url, process.argv[1])) {
   main().catch((error) => {

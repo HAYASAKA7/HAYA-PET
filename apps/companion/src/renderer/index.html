@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' file:; img-src 'self' file: data:; style-src 'self' 'unsafe-inline';" />
+    <title>AI Pet</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- Layer 1: the global pet overlay. -->
+    <canvas id="pet-canvas" width="192" height="208"></canvas>
+
+    <!-- Layer 2: compact session bubbles. -->
+    <div id="bubbles" class="bubbles"></div>
+
+    <!-- Layer 3: task talk window for the selected session. -->
+    <div id="talk-window" class="talk-window hidden"></div>
+
+    <script type="module" src="pet-window.js"></script>
+  </body>
+</html>

@@ -83,6 +83,27 @@ test("runs command through daemon IPC when no send function is injected", async 
   }
 });
 
+test("still runs the wrapped command when no daemon is available", async () => {
+  const calls = [];
+  const result = await runAiPet(
+    ["run", "--client", "generic", "--", "node", "-e", "process.exit(0)"],
+    {
+      cwd: process.cwd(),
+      heartbeatIntervalMs: 10,
+      createIpcClient: async () => {
+        throw new Error("ECONNREFUSED");
+      },
+      runGenericCommand: async (options) => {
+        calls.push(options);
+        return { sessionId: "sess_a", pid: 123, exitCode: 0 };
+      }
+    }
+  );
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(calls.length, 1);
+});
+
 async function waitFor(predicate) {
   const startedAt = Date.now();
 
