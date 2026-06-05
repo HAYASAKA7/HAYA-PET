@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "description": "Generic AI CLI pet runtime foundation.",
+  "bin": {
+    "ai-pet": "apps/cli/src/ai-pet.js"
+  },
   "scripts": {
     "test": "node test/run-tests.mjs"
   },
