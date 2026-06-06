@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 import { realpathSync } from "node:fs";
+import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { runGenericCommand as defaultRunGenericCommand } from "../../../packages/cli-core/src/run-command.js";
+import { ensureCompanionConnection } from "../../../packages/cli-core/src/companion-launcher.js";
 import { createIpcClient as defaultCreateIpcClient } from "../../../packages/daemon-core/src/ipc-server.js";
 import { getDefaultPaths } from "../../../packages/platform-core/src/paths.js";
 import { discoverPets as defaultDiscoverPets } from "../../../packages/pet-core/src/discovery.js";
@@ -31,6 +33,14 @@ export function parseAiPetArgs(argv) {
     return parsePetsArgs(rest);
   }
 
+  if (command === "start") {
+    return { command: "start" };
+  }
+
+  if (command === "stop") {
+    return { command: "stop" };
+  }
+
   throw new Error(`Unsupported ai-pet command: ${command}`);
 }
 
@@ -41,7 +51,53 @@ export async function runAiPet(argv, dependencies = {}) {
     return runPetsCommand(parsed, dependencies);
   }
 
+  if (parsed.command === "start") {
+    return runStartCommand(parsed, dependencies);
+  }
+
+  if (parsed.command === "stop") {
+    return runStopCommand(parsed, dependencies);
+  }
+
   return runRunCommand(parsed, dependencies);
+}
+
+// Ask a running companion to quit (the CLI counterpart to the tray's Quit).
+export async function runStopCommand(_parsed, dependencies = {}) {
+  const print = dependencies.print ?? defaultPrint;
+  // Never auto-start just to stop; only connect if one is already running.
+  const { client } = await connectCompanion(dependencies, false);
+
+  if (!client) {
+    print("ai-pet: companion is not running.");
+    return { command: "stop", ok: true, wasRunning: false };
+  }
+
+  await client.send({ type: "shutdown" });
+  await client.close();
+  print("ai-pet: companion stopped.");
+  return { command: "stop", ok: true, wasRunning: true };
+}
+
+// Explicitly start the companion overlay (so users never need `npm start`).
+export async function runStartCommand(_parsed, dependencies = {}) {
+  const print = dependencies.print ?? defaultPrint;
+  const { client, started, error, timedOut } = await connectCompanion(dependencies, true);
+
+  if (client) {
+    await client.close();
+    print(started ? "ai-pet: companion started." : "ai-pet: companion is already running.");
+    return { command: "start", ok: true, started };
+  }
+
+  if (error) {
+    print(`ai-pet: could not start the companion (${error.message}).`);
+  } else if (timedOut) {
+    print("ai-pet: started the companion but it did not come up in time.");
+  } else {
+    print("ai-pet: companion is not running and auto-start is disabled.");
+  }
+  return { command: "start", ok: false, started: false };
 }
 
 async function runRunCommand(parsed, dependencies) {
@@ -235,27 +291,72 @@ async function createMessageSender(dependencies) {
     };
   }
 
-  const createIpcClient = dependencies.createIpcClient ?? defaultCreateIpcClient;
-  const endpoint = dependencies.ipcEndpoint ?? getDefaultPaths({
-    platform: dependencies.platform,
-    env: dependencies.env,
-    homeDir: dependencies.homeDir
-  }).ipcEndpoint;
+  const { client, started } = await connectCompanion(dependencies, shouldAutoStart(dependencies));
 
-  let client;
-  try {
-    client = await createIpcClient({ endpoint });
-  } catch {
-    // No daemon listening: still run the wrapped command and preserve its exit
-    // code. The pet simply will not reflect this session until the companion
-    // is running (plan section 39 — wrappers degrade gracefully).
+  if (!client) {
+    // No daemon and could not auto-start: still run the wrapped command and
+    // preserve its exit code. The pet just won't reflect this session (plan
+    // section 39 — wrappers degrade gracefully).
     return { send: noopSend, close: noopClose };
+  }
+
+  if (started) {
+    process.stderr.write("ai-pet: started the companion overlay.\n");
   }
 
   return {
     send: (message) => client.send(message),
     close: () => client.close()
   };
+}
+
+// Connects to the companion, optionally auto-starting it if it isn't running.
+function connectCompanion(dependencies, autoStart) {
+  const createIpcClient = dependencies.createIpcClient ?? defaultCreateIpcClient;
+  const endpoint = dependencies.ipcEndpoint ?? getDefaultPaths({
+    platform: dependencies.platform,
+    env: dependencies.env,
+    homeDir: dependencies.homeDir
+  }).ipcEndpoint;
+  const launch = dependencies.launchCompanion ?? defaultLaunchCompanion;
+
+  return ensureCompanionConnection({
+    connect: () => createIpcClient({ endpoint }),
+    launch,
+    autoStart,
+    attempts: dependencies.connectAttempts,
+    intervalMs: dependencies.connectIntervalMs,
+    sleep: dependencies.sleep
+  });
+}
+
+function shouldAutoStart(dependencies) {
+  if (dependencies.autoStart !== undefined) {
+    return dependencies.autoStart;
+  }
+  const env = dependencies.env ?? process.env;
+  const flag = env.AI_PET_NO_AUTOSTART;
+  return flag !== "1" && flag !== "true";
+}
+
+// Spawns the Electron companion as a detached background process so it outlives
+// this `ai-pet run` invocation. `import("electron")` resolves to the binary path
+// when required outside an Electron runtime; the companion app dir is the sibling
+// `apps/companion` package (whose package.json `main` is the overlay entry).
+async function defaultLaunchCompanion() {
+  const electronModule = await import("electron");
+  const electronPath = electronModule.default ?? electronModule;
+  if (typeof electronPath !== "string") {
+    throw new Error("could not resolve the Electron binary");
+  }
+
+  const companionDir = fileURLToPath(new URL("../../companion", import.meta.url));
+  const child = spawn(electronPath, [companionDir], {
+    detached: true,
+    stdio: "ignore",
+    windowsHide: false
+  });
+  child.unref();
 }
 
 async function noopSend() {}

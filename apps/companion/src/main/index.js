@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, screen, Tray } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, nativeImage, screen, Tray } from "electron";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { createDaemonRuntime } from "../../../../packages/daemon-core/src/daemon-runtime.js";
@@ -15,6 +15,12 @@ import { discoverPets } from "./pet-loader.js";
 
 const STALE_SWEEP_INTERVAL_MS = 10_000;
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// Fallback tray icon (16×16 blue dot) used when no tray.png asset is present, so
+// the tray — and therefore the Quit menu — always appears. Without it, a missing
+// icon left users with no way to exit.
+const TRAY_ICON_DATA_URL =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAANElEQVR4nGNgoAXIW/HvPzZMtkaiDCJWM05DKDKAVM0YhowaQAUDBj4dUCUpE2MQQY3kAACyf/g8DHVl5wAAAABJRU5ErkJggg==";
 
 const paths = getDefaultPaths();
 const capabilities = getPlatformCapabilities();
@@ -54,7 +60,14 @@ async function bootstrap() {
 
   ipcServer = await createIpcServer({
     endpoint: paths.ipcEndpoint,
-    onMessage: (message) => runtime.handleMessage(message),
+    onMessage: (message) => {
+      // `ai-pet stop` asks the daemon to exit; everything else is a session event.
+      if (message?.type === "shutdown") {
+        app.quit();
+        return;
+      }
+      return runtime.handleMessage(message);
+    },
     onProtocolError: (error) => console.error("protocol error:", error.message)
   });
 
@@ -123,12 +136,20 @@ function clampPetLocal(local) {
 
 function createTray() {
   try {
-    tray = new Tray(join(__dirname, "..", "renderer", "assets", "tray.png"));
-  } catch {
-    // Tray icon is optional in development; the menu can still be exposed via IPC.
+    tray = new Tray(loadTrayIcon());
+    tray.setToolTip("AI Pet — right-click to Quit");
+  } catch (error) {
+    // A failed tray must not take the whole app down; log and continue.
+    console.error("tray unavailable:", error.message);
     return;
   }
   refreshTrayMenu();
+}
+
+function loadTrayIcon() {
+  const fileIcon = nativeImage.createFromPath(join(__dirname, "..", "renderer", "assets", "tray.png"));
+  // createFromPath returns an empty image (no throw) when the file is missing.
+  return fileIcon.isEmpty() ? nativeImage.createFromDataURL(TRAY_ICON_DATA_URL) : fileIcon;
 }
 
 function refreshTrayMenu() {

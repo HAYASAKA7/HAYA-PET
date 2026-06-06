@@ -205,6 +205,7 @@ test("still runs the wrapped command when no daemon is available", async () => {
     {
       cwd: process.cwd(),
       heartbeatIntervalMs: 10,
+      autoStart: false, // no daemon and no auto-start -> degrade gracefully
       createIpcClient: async () => {
         throw new Error("ECONNREFUSED");
       },
@@ -217,6 +218,112 @@ test("still runs the wrapped command when no daemon is available", async () => {
 
   assert.equal(result.exitCode, 0);
   assert.equal(calls.length, 1);
+});
+
+test("auto-starts the companion when one is not already running", async () => {
+  const calls = [];
+  let launched = 0;
+  let connects = 0;
+
+  const result = await runAiPet(
+    ["run", "--client", "generic", "--", "node", "-e", "process.exit(0)"],
+    {
+      cwd: process.cwd(),
+      heartbeatIntervalMs: 10,
+      sleep: async () => {}, // no real waiting between connect attempts
+      createIpcClient: async () => {
+        connects += 1;
+        if (connects === 1) {
+          throw new Error("ECONNREFUSED"); // not running yet
+        }
+        return { send: async () => {}, close: async () => {} }; // up after launch
+      },
+      launchCompanion: async () => {
+        launched += 1;
+      },
+      runGenericCommand: async (options) => {
+        calls.push(options);
+        return { sessionId: "sess_a", pid: 123, exitCode: 0 };
+      }
+    }
+  );
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(launched, 1, "launches the companion exactly once");
+  assert.equal(calls.length, 1, "still runs the wrapped command");
+});
+
+test("AI_PET_NO_AUTOSTART disables auto-starting the companion", async () => {
+  let launched = 0;
+  await runAiPet(
+    ["run", "--client", "generic", "--", "node", "-e", "process.exit(0)"],
+    {
+      cwd: process.cwd(),
+      heartbeatIntervalMs: 10,
+      env: { AI_PET_NO_AUTOSTART: "1" },
+      ipcEndpoint: "test-endpoint",
+      createIpcClient: async () => {
+        throw new Error("ECONNREFUSED");
+      },
+      launchCompanion: async () => {
+        launched += 1;
+      },
+      runGenericCommand: async () => ({ sessionId: "sess_a", pid: 1, exitCode: 0 })
+    }
+  );
+
+  assert.equal(launched, 0);
+});
+
+test("parses the start command and reports when already running", async () => {
+  assert.deepEqual(parseAiPetArgs(["start"]), { command: "start" });
+
+  const lines = [];
+  const result = await runAiPet(["start"], {
+    createIpcClient: async () => ({ send: async () => {}, close: async () => {} }),
+    launchCompanion: async () => {
+      throw new Error("should not launch when already running");
+    },
+    print: (line) => lines.push(line)
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.started, false);
+  assert.ok(lines.some((line) => line.includes("already running")));
+});
+
+test("stop command sends a shutdown to a running companion", async () => {
+  assert.deepEqual(parseAiPetArgs(["stop"]), { command: "stop" });
+
+  const sent = [];
+  const lines = [];
+  const result = await runAiPet(["stop"], {
+    createIpcClient: async () => ({
+      send: async (message) => sent.push(message),
+      close: async () => {}
+    }),
+    print: (line) => lines.push(line)
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.wasRunning, true);
+  assert.deepEqual(sent, [{ type: "shutdown" }]);
+  assert.ok(lines.some((line) => line.includes("stopped")));
+});
+
+test("stop command is a no-op when nothing is running", async () => {
+  const lines = [];
+  const result = await runAiPet(["stop"], {
+    ipcEndpoint: "test-endpoint",
+    createIpcClient: async () => {
+      throw new Error("ECONNREFUSED");
+    },
+    print: (line) => lines.push(line)
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.wasRunning, false);
+  assert.ok(lines.some((line) => line.includes("not running")));
 });
 
 async function waitFor(predicate) {

@@ -26,7 +26,9 @@ export const PROTOCOL_MESSAGE_TYPES = Object.freeze([
   "register",
   "heartbeat",
   "state",
-  "unregister"
+  "unregister",
+  // Control message (not session-scoped): asks the daemon to shut down.
+  "shutdown"
 ]);
 
 const AI_CLIENT_STATE_SET = new Set(AI_CLIENT_STATES);
@@ -53,6 +55,11 @@ export function validateProtocolMessage(message) {
       ok: false,
       errors: [`Unknown protocol message type: ${String(message.type)}`]
     };
+  }
+
+  // Control messages are daemon-wide, not tied to a session.
+  if (message.type === "shutdown") {
+    return { ok: true, errors: [] };
   }
 
   requireNonEmptyString(errors, message.sessionId, "sessionId");

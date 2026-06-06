@@ -105,13 +105,19 @@ AI terminal clients
 ```
 
 You launch any AI CLI through the wrapper, which registers a session and reports
-lifecycle events to the daemon:
+lifecycle events to the daemon. The wrapper **auto-starts the daemon/overlay** the
+first time it's needed, so end users only ever type `ai-pet run …`:
 
 ```bash
 ai-pet run --client codex        -- codex
 ai-pet run --client claude-code  -- claude
 ai-pet run --client generic      -- aider
 ```
+
+> **Distribution note.** Because `ai-pet run` launches the overlay by spawning
+> `electron <companion>`, `electron` is declared as a runtime dependency (not just
+> a dev tool) so it ships with an install. `node-pty` stays optional (live
+> observation degrades gracefully without it).
 
 | Component | Responsibility |
 |---|---|
@@ -191,15 +197,17 @@ node D:\path\to\haya-pet\apps\cli\src\ai-pet.js
 ### 3. Launch the companion overlay (this is also the daemon)
 
 The Electron companion renders the pet **and** hosts the IPC server that wrappers
-talk to. Starting it starts everything — there is no separate daemon process yet.
+talk to. **You normally don't start it yourself** — the first `ai-pet run`
+auto-starts it in the background (see step 5). To start it explicitly:
 
 ```powershell
-cd apps\companion
-npm install         # installs Electron (≥ 28) into the app
-npm start           # electron .
+ai-pet start        # starts the overlay if it isn't already running
 ```
 
-A transparent pet appears (bottom-right by default). Leave this window running.
+> Behind the scenes this spawns Electron detached, the same as `npm start` /
+> `electron .` from `apps/companion` (still available for development).
+
+A transparent pet appears (bottom-right by default).
 
 > **No spritesheet?** The pet renders labelled placeholder frames (a blue box
 > showing the current action) so everything still works. Add a real pet in step 4.
@@ -225,7 +233,8 @@ You can also pick from the tray menu → **Installed Pets**.
 
 ### 5. Track an AI session
 
-With the companion running, open **another** terminal and wrap any command:
+Just wrap any command — **if the companion isn't running yet, `ai-pet run`
+starts it for you** (no `npm start` needed), then connects:
 
 ```powershell
 ai-pet run --client generic      -- powershell -Command "Start-Sleep 10"
@@ -242,6 +251,12 @@ ai-pet run --client generic -- sleep 10
 While the command runs, a **session bubble** appears (client · project · status)
 and the pet reflects the highest-priority session. On exit the pet shows success
 (jump) or failure.
+
+> **Auto-start details.** On the first `ai-pet run`, the overlay is launched
+> detached and `ai-pet` waits briefly for it to come up before connecting. If it
+> can't be started (e.g. Electron isn't installed), the wrapped command still runs
+> normally — you just won't see the pet. Set `AI_PET_NO_AUTOSTART=1` to disable
+> auto-start, or run `ai-pet start` to launch the overlay on its own.
 
 #### Live activity status (default)
 
@@ -263,23 +278,33 @@ plain lifecycle tracking. Keyword heuristics (detecting specific states like
 "waiting for approval" from output text) are available but opt-in, since
 substring matching is unreliable on rich TUIs.
 
-> **Order matters:** start the companion first. If it isn't running, your wrapped
-> command still runs normally and keeps its exit code — the pet just won't
-> reflect it.
+> **No need to start anything first** — the first `ai-pet run` auto-starts the
+> companion. If it can't be started, your wrapped command still runs normally and
+> keeps its exit code; the pet just won't reflect it.
 
 ### 6. Interact with the pet
 
 | Action | Result |
 |---|---|
-| Single click | waves |
-| Double click | jumps + opens the task talk window |
-| Drag | moves the pet; position is saved |
-| Click a session bubble | selects it + opens the talk window |
-| Tray icon → menu | show/hide, display mode, sessions, pets, **reset position** |
+| Single click | waves + folds/unfolds the session bubbles |
+| Double click | jumps + expands the bubbles |
+| Drag | moves the pet; position is saved (bubbles follow, always on-screen) |
+| Tray icon → menu | show/hide, display mode, sessions, pets, **reset position**, **Quit** |
 
 The **tray menu** is your recovery tool if the pet goes off-screen or hidden.
 
-### 7. (Optional, Windows) Build the terminal-window helper
+### 7. Stop / exit the pet
+
+Pick whichever is handy:
+
+```powershell
+ai-pet stop          # ask the running companion to quit
+```
+
+…or **right-click the tray icon → Quit**. (`ai-pet stop` is a no-op if nothing is
+running, so it's always safe to call.)
+
+### 8. (Optional, Windows) Build the terminal-window helper
 
 For attaching bubbles near terminal windows on Windows:
 

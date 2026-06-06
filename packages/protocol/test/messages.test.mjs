@@ -105,3 +105,8 @@ test("rejects unknown message types", () => {
     /Unknown protocol message type: unknown/
   );
 });
+
+test("accepts a shutdown control message without a sessionId", () => {
+  assert.deepEqual(validateProtocolMessage({ type: "shutdown" }), { ok: true, errors: [] });
+  assert.deepEqual(assertProtocolMessage({ type: "shutdown" }), { type: "shutdown" });
+});
