@@ -1,7 +1,6 @@
 {
   "name": "haya-pet",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "description": "Generic AI CLI pet runtime foundation.",
   "bin": {
