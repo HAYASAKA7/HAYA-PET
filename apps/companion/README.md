@@ -1,8 +1,12 @@
 # AI Pet Companion (Electron overlay)
 
 The desktop overlay app for the AI CLI pet runtime. It hosts the daemon IPC
-server, renders the global pet, shows session bubbles, and exposes the task
-talk window.
+server, renders the global pet, and shows the session bubbles. (A reply/approval
+"task talk window" is scaffolded but parked — see below.)
+
+> Most users never launch this directly: `ai-pet run` auto-starts it. This doc
+> covers its internals. For installing/using AI Pet, see the
+> [root README](../../README.md) and [docs/architecture.md](../../docs/architecture.md).
 
 ## Architecture
 
@@ -30,26 +34,23 @@ main process (index.js)
   └─ tray + position persistence
 
 renderer
-  ├─ pet-window.js      (Layer 1: pet canvas)
-  ├─ session-bubbles.js (Layer 2: bubbles)
-  └─ task-talk-window.js(Layer 3: control surface)
+  ├─ pet-window.js      (Layer 1: pet canvas + drag + panel placement)
+  ├─ session-bubbles.js (Layer 2: bubbles + folder toggle + status icons)
+  └─ task-talk-window.js(Layer 3: reply/approval surface — PARKED, not wired)
 ```
 
 ## Run
 
-Electron is not part of the dependency-light core and is not installed by the
-root workspace. Install it inside this app first:
+Normally you don't — `ai-pet run` (or `ai-pet start`) launches the overlay by
+spawning Electron, which is a root runtime dependency. For development you can
+still start it directly:
 
 ```bash
-cd apps/companion
-npm install
-npm start          # electron .
+npm start          # electron .  (from apps/companion)
 ```
 
-Requires Electron ≥ 28 (for ESM main-process support) and Node ≥ 18.
-
-Then, from any terminal, launch an AI CLI through the wrapper so the pet
-reflects it:
+Requires Node ≥ 18. Then, from any terminal, launch an AI CLI through the wrapper
+so the pet reflects it:
 
 ```bash
 ai-pet run --client generic -- sleep 10
@@ -74,8 +75,9 @@ so the companion starts with your last selected pet.
 
 ## Safety
 
-- The overlay never steals focus (`focusable: false` on supported platforms).
-- The reply button is gated by adapter capability: wrapper-only clients show
-  "Open terminal to reply" instead of injecting text blindly.
-- Approvals require explicit user action and are never auto-approved.
+- The overlay never steals focus (`focusable: false` on supported platforms) and
+  is click-through except over the pet and bubbles.
 - All IPC is local-only; nothing is sent to the network.
+- When the parked reply/approval surface is wired up, replies will be gated by
+  adapter capability (wrapper-only clients can't inject text blindly) and
+  approvals will always require explicit user action.

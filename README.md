@@ -8,11 +8,8 @@ A transparent, draggable desktop pet that reflects what your AI CLIs are doing �
 Codex, Claude Code, Antigravity, Aider, or any command — through one shared
 runtime with client adapters.
 
-<!-- ─────────────────────────────────────────────────────────────
-     HERO SCREENSHOT
-     Drop a wide hero shot at docs/screenshots/hero.png
-     (the pet sitting on the desktop with a couple of session bubbles)
-     ───────────────────────────────────────────────────────────── -->
+<!-- HERO SCREENSHOT: drop a wide shot at docs/screenshots/hero.png
+     (the pet on the desktop with a couple of session bubbles) -->
 
 ![AI Pet on the desktop](docs/screenshots/hero.png)
 
@@ -35,254 +32,149 @@ Antigravity CLI → infra repo
 Aider           → docs repo
 ```
 
-AI Pet observes all of them and presents one coherent ambient interface:
+AI Pet watches all of them and presents one ambient interface:
 
-- **One global pet** — reflects the selected or most urgent AI session, and is
-  clickable, draggable, and position-persistent like a real desktop companion.
+- **One global pet** — reflects the selected or most urgent AI session; clickable,
+  draggable, and position-persistent like a real desktop companion.
 - **Session bubbles** — one compact bubble per active session showing client,
-  project, status, and a short summary.
-- **A task talk window** — a focused control surface to read the latest update,
-  reply, and approve/deny actions for the selected session.
+  project, the latest activity, and a status icon (a spinning *working* circle, a
+  green *done* check, a yellow *needs you*, or a red *failed* cross). A folder
+  button beside the pet folds them away.
 
 ## Features
 
-- 🪟 **Transparent, frameless, always-on-top overlay** that does not steal focus
-  and stays click-through outside the pet's hitbox.
-- 🖱️ **Click / double-click / drag** interactions — single click waves, double
-  click jumps, drag moves the pet and persists its position.
+- 🪟 **Transparent, frameless, always-on-top overlay** that doesn't steal focus and
+  stays click-through outside the pet and bubbles.
+- 🖱️ **Click / double-click / drag** — click folds/unfolds the bubbles, double-click
+  expands them, drag moves the pet (position persists; bubbles stay on-screen).
+- 🟢 **Live session bubbles** with per-session status icons and a folder toggle.
 - 🧠 **Normalized state model** — every client maps to a shared state vocabulary
-  (`thinking`, `running_tool`, `waiting_approval`, `reviewing`, `failed`, …)
-  that drives the pet animation.
+  (`thinking`, `running_tool`, `waiting_approval`, `reviewing`, `failed`, …).
 - 🧩 **Client adapters** with tiered support (process wrapper → PTY observer →
   log/state → official plugin) so the daemon never bakes in client-specific logic.
-- 💬 **Task talk window** with status pills, reply composer, and approval
-  controls — gated by what each adapter can *safely* do.
+- 🚀 **Zero-setup launch** — `ai-pet run …` auto-starts the overlay; no separate
+  daemon to manage.
 - 🖼️ **Codex-compatible pet assets** (1536×1872 sprite atlas, 9 actions).
-- 🔒 **Local-only & private** — no prompts, files, or screenshots ever leave your
-  machine.
-- 🪟🍎🐧 **Cross-platform** core with per-OS adapters for IPC, windowing, and
-  terminal attachment.
+- 🔒 **Local-only & private** — no prompts, files, or screenshots leave your machine.
+- 🪟🍎🐧 **Cross-platform** core with per-OS adapters for IPC and windowing.
 
 ## Screenshots
 
-<!-- ─────────────────────────────────────────────────────────────
-     Drop each PNG into docs/screenshots/ with the filename shown.
-     Suggested width ~800px. Delete any row you don't have a shot for.
-     ───────────────────────────────────────────────────────────── -->
+<!-- Drop each PNG into docs/screenshots/ with the filename shown (~800px wide).
+     Delete any row you don't have a shot for. -->
 
-### The global pet
+| | |
+|---|---|
+| **The global pet** — reacting to the highest-priority session.<br>![Pet overlay](docs/screenshots/pet-overlay.png) | **Session bubbles** — one per active session, with status icons.<br>![Session bubbles](docs/screenshots/session-bubbles.png) |
+| **Folder collapsed** — bubbles tucked away beside the pet.<br>![Folder collapsed](docs/screenshots/folder-collapsed.png) | **Tray menu** — show/hide, pets, reset position, Quit.<br>![Tray menu](docs/screenshots/tray-menu.png) |
 
-> The pet overlay reacting to the highest-priority session.
+## Documentation
 
-![Pet overlay](docs/screenshots/pet-overlay.png)
+| Doc | What's in it |
+|---|---|
+| **This README** | Install + users' guide |
+| [docs/architecture.md](docs/architecture.md) | How it works, components, project structure, adapter tiers, platform matrix, native helpers, roadmap |
+| [docs/publishing.md](docs/publishing.md) | Releasing to npm (the tag → publish workflow) |
+| [docs/troubleshooting.md](docs/troubleshooting.md) | Common fixes, incl. repairing a broken Electron install |
+| [docs/known-issues.md](docs/known-issues.md) | Deferred issues with known root causes |
+| [docs/cross-os-qa.md](docs/cross-os-qa.md) | Cross-OS test matrix |
+| [apps/companion/README.md](apps/companion/README.md) | Companion (Electron) internals |
+| [PROGRESS.md](PROGRESS.md) | Detailed development log |
 
-### Session bubbles
+---
 
-> One compact bubble per active AI session.
+# Users' Guide
 
-![Session bubbles](docs/screenshots/session-bubbles.png)
+## Requirements
 
-### Task talk window
+| Requirement | Why |
+|---|---|
+| **Node ≥ 18** | Runtime + companion (Electron) |
+| **npm** | Install + scripts |
 
-> Status, latest activity, reply box, and approval controls for the selected session.
+> Live activity status uses the optional `node-pty` (installed automatically when
+> it can build; the pet degrades to lifecycle-only tracking without it).
 
-![Task talk window](docs/screenshots/task-talk-window.png)
+## Install
 
-### Tray menu
+**From npm** *(once published — recommended for users):*
 
-> Recovery controls — show/hide, display mode, sessions, pets, reset position.
-
-![Tray menu](docs/screenshots/tray-menu.png)
-
-## How it works
-
-```text
-AI terminal clients
-    → client adapters        (normalize behavior into a common event model)
-    → ai-petd daemon         (sessions, priority, pet state, IPC)
-    → shared pet runtime     (assets, animation, interaction)
-    → desktop overlay        (global pet + session bubbles + task talk window)
+```bash
+npm install -g ai-pet     # exposes the `ai-pet` command globally
 ```
 
-You launch any AI CLI through the wrapper, which registers a session and reports
-lifecycle events to the daemon. The wrapper **auto-starts the daemon/overlay** the
-first time it's needed, so end users only ever type `ai-pet run …`:
+**From source** *(current):*
+
+```bash
+git clone <repo-url> haya-pet
+cd haya-pet
+npm install
+npm link                  # makes `ai-pet` available everywhere
+```
+
+Prefer not to link globally? Call it directly anywhere you'd type `ai-pet`:
+`node <repo>/apps/cli/src/ai-pet.js`.
+
+## Run an AI session
+
+Just wrap any command. **The first `ai-pet run` auto-starts the pet overlay** —
+there's nothing to launch first:
 
 ```bash
 ai-pet run --client codex        -- codex
 ai-pet run --client claude-code  -- claude
 ai-pet run --client generic      -- aider
-```
-
-> **Distribution note.** Because `ai-pet run` launches the overlay by spawning
-> `electron <companion>`, `electron` is declared as a runtime dependency (not just
-> a dev tool) so it ships with an install. `node-pty` stays optional (live
-> observation degrades gracefully without it).
-
-| Component | Responsibility |
-|---|---|
-| `ai-petd` (companion) | Global daemon: owns sessions, pet state, windows, IPC. |
-| `ai-pet` (CLI) | Wrapper: launches clients, registers sessions, reports events. |
-| adapters | Translate client-specific behavior into the common state model. |
-| pet-core | Loads pet assets, computes frames, drives animation state. |
-| session-core | Tracks sessions, priority, summaries, bubble view models. |
-| task-core | Task status, events, approvals, replies, control gating. |
-| platform-core | Per-OS paths, capabilities, and fallback tiers. |
-
-## Project structure
-
-```text
-packages/
-  protocol/        IPC message types + validation
-  pet-core/        atlas, manifest, validation, animator, animation-state
-  session-core/    registry, priority, summaries, bubble views
-  task-core/       task status, events, store, approvals, replies, controls
-  adapters/        client info, heuristics, capabilities, output observer, routing
-  daemon-core/     IPC server/transport, runtime bridge, singleton
-  platform-core/   platform, paths, capabilities
-apps/
-  cli/             ai-pet run entrypoint + parser
-  companion/       Electron overlay app (main + renderer)
-  pet-preview/     static preview scaffold
-native/
-  win-window-helper/   Windows terminal-window helper (.NET, implemented)
-  mac-window-helper/   macOS helper (contract documented)
-  linux-window-helper/ Linux X11/Wayland helper (contract documented)
-assets/
-  fallback-pet/    bundled fallback pet manifest
-```
-
-## Quick Start
-
-A full setup-and-use guide. Commands are shown for **Windows / PowerShell**
-first (this is the primary dev platform); macOS/Linux equivalents are noted
-where they differ.
-
-### 0. Prerequisites
-
-| Requirement | Why | Check |
-|---|---|---|
-| **Node ≥ 18** | Core + companion (Electron) | `node --version` |
-| **npm** | Install + scripts | `npm --version` |
-| **.NET SDK 10** | *Optional* — only to build the Windows terminal helper (`net10.0-windows`) | `dotnet --version` |
-
-> The core runtime has **no external npm dependencies**. Only the companion app
-> pulls in Electron (installed inside the app, not the root).
-
-### 1. Get the code and verify the core
-
-```powershell
-git clone <your-fork-or-repo-url> haya-pet
-cd haya-pet
-npm test            # expect: 172/172 tests passed
-```
-
-If the tests pass, the runtime logic is healthy before you touch any UI.
-
-### 2. Make the `ai-pet` wrapper command available
-
-The CLI is declared as a bin in the root `package.json`. Register it once:
-
-```powershell
-npm link            # now `ai-pet` works from any terminal
-```
-
-Prefer not to link globally? Call it directly instead — anywhere you see
-`ai-pet`, substitute:
-
-```powershell
-node D:\path\to\haya-pet\apps\cli\src\ai-pet.js
-```
-
-### 3. Launch the companion overlay (this is also the daemon)
-
-The Electron companion renders the pet **and** hosts the IPC server that wrappers
-talk to. **You normally don't start it yourself** — the first `ai-pet run`
-auto-starts it in the background (see step 5). To start it explicitly:
-
-```powershell
-ai-pet start        # starts the overlay if it isn't already running
-```
-
-> Behind the scenes this spawns Electron detached, the same as `npm start` /
-> `electron .` from `apps/companion` (still available for development).
-
-A transparent pet appears (bottom-right by default).
-
-> **No spritesheet?** The pet renders labelled placeholder frames (a blue box
-> showing the current action) so everything still works. Add a real pet in step 4.
-
-### 4. (Optional) Add and choose a pet
-
-Drop a Codex-compatible pet folder into a search path:
-
-```text
-%USERPROFILE%\.codex\pets\my-pet\      (macOS/Linux: ~/.codex/pets/my-pet/)
-    pet.json          { "id": "my-pet", "name": "My Pet", "spritesheet": "spritesheet.webp" }
-    spritesheet.webp  1536×1872 atlas (8×9 cells of 192×208)
-```
-
-Then pick it (the choice is stored and reused on every launch):
-
-```powershell
-ai-pet pets              # list installed pets (* = selected)
-ai-pet pets use my-pet   # select; applied on the companion's next start
-```
-
-You can also pick from the tray menu → **Installed Pets**.
-
-### 5. Track an AI session
-
-Just wrap any command — **if the companion isn't running yet, `ai-pet run`
-starts it for you** (no `npm start` needed), then connects:
-
-```powershell
+# Windows / PowerShell example:
 ai-pet run --client generic      -- powershell -Command "Start-Sleep 10"
-ai-pet run --client codex        -- codex
-ai-pet run --client claude-code  -- claude
 ```
 
-macOS/Linux example:
+A **session bubble** appears while the command runs (client · project · status),
+and the pet reflects the highest-priority session. On exit the bubble briefly
+shows success (a green check) or failure (a red cross), then fades.
+
+> If the overlay can't be started (e.g. Electron is missing), your command still
+> runs normally and keeps its exit code — you just won't see the pet. Disable
+> auto-start with `AI_PET_NO_AUTOSTART=1`, or launch it yourself with `ai-pet start`.
+
+### Live activity status
+
+By default the wrapper runs the CLI through a pseudo-terminal and shows *working*
+while the AI produces output, returning to *idle* after a short quiet window.
+Success/failure come from the real exit code — never from scraping the word
+"error" out of output. Your terminal stays fully interactive.
 
 ```bash
-ai-pet run --client generic -- sleep 10
+ai-pet run -- claude          # live status (default)
+ai-pet run --no-observe -- claude   # lifecycle only (opt out of PTY observation)
 ```
 
-While the command runs, a **session bubble** appears (client · project · status)
-and the pet reflects the highest-priority session. On exit the pet shows success
-(jump) or failure.
+> ⚠️ Running a CLI through the default PTY observation currently affects terminal
+> scrolling and backspace in some setups — see
+> [docs/known-issues.md](docs/known-issues.md). `--no-observe` avoids it.
 
-> **Auto-start details.** On the first `ai-pet run`, the overlay is launched
-> detached and `ai-pet` waits briefly for it to come up before connecting. If it
-> can't be started (e.g. Electron isn't installed), the wrapped command still runs
-> normally — you just won't see the pet. Set `AI_PET_NO_AUTOSTART=1` to disable
-> auto-start, or run `ai-pet start` to launch the overlay on its own.
+## Add and choose a pet
 
-#### Live activity status (default)
+A pet is a folder with `pet.json` and a 1536×1872 sprite atlas (8×9 cells of
+192×208). Drop it into a search path:
 
-The wrapper runs the CLI through a pseudo-terminal and reflects activity from its
-output — **on by default**. It is **activity-based**: while the AI is producing
-output the pet shows *working* (running), and after a short quiet window it
-returns to *idle*. Success/failure come from the real exit code (a one-shot
-reaction), never from scraping the word "error" out of the output.
-
-```powershell
-ai-pet run --client claude-code -- claude   # live status, no extra flag
-ai-pet run --no-observe -- claude           # opt out: lifecycle only
+```text
+~/.codex/pets/my-pet/                     (Windows: %USERPROFILE%\.codex\pets\my-pet\)
+    pet.json          { "id": "my-pet", "name": "My Pet", "spritesheet": "spritesheet.webp" }
+    spritesheet.webp
 ```
 
-It uses the optional `node-pty` dependency (installed automatically when
-available) and never downgrades your terminal — the CLI keeps its full
-interactive TTY. If `node-pty` isn't installed, it transparently falls back to
-plain lifecycle tracking. Keyword heuristics (detecting specific states like
-"waiting for approval" from output text) are available but opt-in, since
-substring matching is unreliable on rich TUIs.
+Pets are discovered from `~/.codex/pets` and `~/.ai-pet/pets`. Then choose one:
 
-> **No need to start anything first** — the first `ai-pet run` auto-starts the
-> companion. If it can't be started, your wrapped command still runs normally and
-> keeps its exit code; the pet just won't reflect it.
+```bash
+ai-pet pets               # list installed pets (* = selected)
+ai-pet pets use my-pet    # select; remembered on every launch
+```
 
-### 6. Interact with the pet
+Your choice is stored and reused every time. You can also pick from the tray menu
+→ **Installed Pets**. Without a spritesheet, the pet renders labelled placeholder
+frames so everything still works.
+
+## Interact with the pet
 
 | Action | Result |
 |---|---|
@@ -291,144 +183,64 @@ substring matching is unreliable on rich TUIs.
 | Drag | moves the pet; position is saved (bubbles follow, always on-screen) |
 | Tray icon → menu | show/hide, display mode, sessions, pets, **reset position**, **Quit** |
 
-The **tray menu** is your recovery tool if the pet goes off-screen or hidden.
+## Stop / exit the pet
 
-### 7. Stop / exit the pet
-
-Pick whichever is handy:
-
-```powershell
-ai-pet stop          # ask the running companion to quit
+```bash
+ai-pet stop      # ask the running overlay to quit
 ```
 
-…or **right-click the tray icon → Quit**. (`ai-pet stop` is a no-op if nothing is
-running, so it's always safe to call.)
+…or **right-click the tray icon → Quit**. `ai-pet stop` is a no-op if nothing is
+running, so it's always safe to call.
 
-### 8. (Optional, Windows) Build the terminal-window helper
+## Manage the overlay
 
-For attaching bubbles near terminal windows on Windows:
-
-```powershell
-cd native\win-window-helper
-dotnet build -c Release
-# -> bin/Release/net10.0-windows/ai-pet-win-window-helper.exe
+```bash
+ai-pet start     # start the overlay explicitly (usually unnecessary — run auto-starts it)
+ai-pet stop      # quit it
 ```
 
-### Troubleshooting
+## Troubleshooting
+
+Common fixes:
 
 | Symptom | Fix |
 |---|---|
-| `ai-pet: command not found` | Run `npm link` in the repo root (step 2), or call the file directly. |
-| Pet doesn't react to a session | Make sure the companion is running, and that you launched the command via `ai-pet run …`. |
-| Pet shows a blue placeholder box | No spritesheet found — add one (step 4); behaviour is otherwise correct. |
+| `ai-pet: command not found` | Install globally, or `npm link` in a source checkout. |
+| Pet doesn't react to a session | Launch via `ai-pet run …`; check `AI_PET_NO_AUTOSTART` isn't set. |
+| Pet shows a blue placeholder box | No spritesheet — add a pet (above). |
 | Pet is off-screen | Tray menu → **Reset Position**. |
-| `ai-pet pets` shows "No pets found" | Add a pet folder with **both** `pet.json` and a spritesheet to a search path. |
-| `npm start` → `ENOENT … electron\path.txt` | Electron's postinstall extraction was interrupted/corrupted. See "Fixing a broken Electron install" below. |
+| Can't exit | `ai-pet stop` or tray → **Quit**. |
 
-#### Fixing a broken Electron install
+Full list (incl. repairing a broken Electron install): [docs/troubleshooting.md](docs/troubleshooting.md).
 
-If `npm start` fails with `ENOENT … node_modules\electron\path.txt`, the Electron
-binary download succeeded but extraction left `dist/` empty. The cached zip is
-fine, so re-extract it without re-downloading (PowerShell):
-
-```powershell
-$cache = Get-ChildItem "$env:LOCALAPPDATA\electron\Cache" -Recurse -Filter "electron-*.zip" |
-         Sort-Object LastWriteTime -Descending | Select-Object -First 1
-$dist  = "node_modules\electron\dist"          # run from the repo root
-Remove-Item -Recurse -Force $dist -ErrorAction SilentlyContinue
-New-Item -ItemType Directory $dist | Out-Null
-Expand-Archive -Path $cache.FullName -DestinationPath $dist -Force
-Set-Content "node_modules\electron\path.txt" "electron.exe" -NoNewline
-node_modules\.bin\electron --version            # should print the version
-```
-
-If `electron.exe` is missing even after a clean `Expand-Archive`, your antivirus
-likely quarantined it — allow `node_modules\electron\dist\electron.exe` and retry.
-
-See [`apps/companion/README.md`](apps/companion/README.md) for companion internals
-and [`docs/cross-os-qa.md`](docs/cross-os-qa.md) for the cross-OS test matrix.
+---
 
 ## Supported clients
 
 | Client | Status | Support level |
 |---|---|---|
 | Generic CLI | ✅ | L1 process wrapper |
-| Codex | ✅ | L1 + L2 PTY heuristics |
-| Claude Code | ✅ | L1 + L2 PTY heuristics |
+| Codex | ✅ | L1 + L2 PTY observation |
+| Claude Code | ✅ | L1 + L2 PTY observation |
 | Antigravity | ✅ | L1 wrapper |
-| Gemini CLI / Aider / others | 🔜 | via generic adapter |
+| Gemini CLI / Aider / others | 🔜 | via the generic adapter |
 
-## Platform support
-
-| Feature | Windows | macOS | Linux X11 | Linux Wayland |
-|---|---|---|---|---|
-| Protocol / session core | ✅ | ✅ | ✅ | ✅ |
-| Generic CLI wrapper | ✅ | ✅ | ✅ | ✅ |
-| Local daemon IPC | named pipe | unix socket | unix socket | unix socket |
-| Transparent overlay | ✅ | ✅ | ✅ | best-effort |
-| Terminal attachment | ✅ helper | 🔜 | 🔜 | fallback |
-
-See [`docs/cross-os-qa.md`](docs/cross-os-qa.md) for the full matrix.
-
-## Pets
-
-Pets are discovered from `~/.codex/pets` and `~/.ai-pet/pets` (on Windows:
-`%USERPROFILE%\.codex\pets` and `%LOCALAPPDATA%\ai-pet\pets`). A pet is a folder
-with `pet.json` and a 1536×1872 sprite atlas (8×9 cells of 192×208, 9 actions):
-
-```text
-~/.codex/pets/
-  my-pet/
-    pet.json            { "id": "my-pet", "name": "My Pet", "spritesheet": "spritesheet.webp" }
-    spritesheet.webp
-```
-
-Without a spritesheet, the renderer draws labelled placeholder frames so
-interaction and state mapping still work. See
-[`assets/fallback-pet/README.md`](assets/fallback-pet/README.md).
-
-### Choosing a pet
-
-List installed pets and select one from the command line:
-
-```bash
-ai-pet pets              # list discovered pets (* marks the selected one)
-ai-pet pets use my-pet   # select a pet
-```
-
-Your choice is stored in the state file (`globalPet.selectedPetId`), so the
-companion **starts with your last selected pet** every time. You can also pick a
-pet from the tray menu → **Installed Pets**. (A running companion picks up a CLI
-change on its next start.)
+(See [docs/architecture.md](docs/architecture.md) for the support tiers and the
+platform matrix.)
 
 ## Privacy
 
 AI Pet is local-only by default. It does **not** upload prompts, files,
 screenshots, or session logs; it stores only short derived status summaries.
-The reply button never blindly types into a terminal — wrapper-only clients show
-"Open terminal to reply" instead. Approvals always require explicit user action.
+Approvals always require explicit user action.
 
-## Status & roadmap
-
-The shared core, CLI wrapper, daemon IPC, adapters, task talk core, Electron
-shell, the Windows terminal helper, and PTY-based live activity observation
-(`--observe`) are implemented and tested. In progress:
-
-- Bidirectional IPC so the daemon routes replies/approvals back to the wrapper.
-- macOS (Swift/AppKit) and Linux X11 (Xlib) terminal helpers.
-- A larger mouse-pass-through overlay window so bubbles / the task talk window
-  sit beside the pet instead of on top of it.
-- Production overlay/IPC validation across all platforms.
-
-See [`PROGRESS.md`](PROGRESS.md) for the detailed log.
-
-## Testing
+## Contributing & tests
 
 ```bash
-npm test     # 159 tests across the core packages and apps
+npm test     # runs the full suite (TDD; tests live in **/test/*.test.mjs)
 ```
 
-Tests are written first (TDD) and live next to each module in `**/test/*.test.mjs`.
+See [docs/architecture.md](docs/architecture.md) to find your way around the code.
 
 ## License
 
