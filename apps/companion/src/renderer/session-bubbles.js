@@ -68,21 +68,21 @@ function renderFolderButton(bubbles, collapsed, onToggle) {
   btn.setAttribute("aria-expanded", String(!collapsed));
   btn.title = collapsed ? "Show sessions" : "Hide sessions";
 
-  const icon = document.createElement("span");
-  icon.className = "folder-icon";
-  icon.textContent = collapsed ? "📁" : "📂";
+  // A simple disclosure caret (rotates when open) — quieter than a folder glyph.
+  const caret = document.createElement("span");
+  caret.className = "caret";
 
   const count = document.createElement("span");
   count.className = "folder-count";
   count.textContent = String(bubbles.length);
 
-  // A small dot summary of the most urgent kind when collapsed, so the user can
-  // tell something needs attention without opening the folder.
+  // A small dot summary of the most urgent kind, so the user can tell something
+  // needs attention without opening the folder.
   const summary = document.createElement("span");
   summary.className = "folder-summary";
   summary.dataset.kind = mostUrgentKind(bubbles);
 
-  btn.append(icon, count, summary);
+  btn.append(caret, count, summary);
   btn.addEventListener("click", onToggle);
   return btn;
 }

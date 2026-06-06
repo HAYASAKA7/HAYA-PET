@@ -89,20 +89,36 @@ function clampPetLocal(pos) {
   };
 }
 
-// Places the bubble panel on whichever side of the pet has room, fully inside
-// the overlay (== the work area), so dragging never pushes it off-screen.
+// Anchors the folder button on whichever side of the pet has room, fully inside
+// the overlay (== the work area), so dragging never pushes it off-screen. The
+// button's box drives the placement; the (absolutely positioned) list then
+// opens toward the screen centre, so toggling it never moves the button.
 function placePanel() {
   const rect = panelEl.getBoundingClientRect();
   if (!rect.width || !rect.height) {
     return; // nothing to place (no active sessions)
   }
+
+  const workArea = { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight };
   const placement = resolvePanelPlacement({
     pet: { x: petLocal.x, y: petLocal.y, width: canvas.width, height: canvas.height },
     panel: { width: rect.width, height: rect.height },
-    workArea: { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight }
+    workArea
   });
   panelEl.style.left = `${Math.round(placement.x)}px`;
   panelEl.style.top = `${Math.round(placement.y)}px`;
+
+  const list = panelEl.querySelector(".bubble-list");
+  if (list) {
+    const margin = 12;
+    const openUp = placement.y > workArea.height / 2;
+    const alignRight = placement.x + rect.width / 2 > workArea.width / 2;
+    list.dataset.openDirection = openUp ? "up" : "down";
+    list.dataset.openAlign = alignRight ? "right" : "left";
+    // Cap the height to the room actually available on the chosen side.
+    const room = openUp ? placement.y - margin : workArea.height - (placement.y + rect.height) - margin;
+    list.style.maxHeight = `${Math.max(96, Math.round(room))}px`;
+  }
 }
 
 function frameLoop(now) {

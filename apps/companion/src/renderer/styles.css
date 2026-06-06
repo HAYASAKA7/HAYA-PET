@@ -44,18 +44,15 @@ body {
 
 /* Panel container is inert; its children opt back into pointer events so the
    gaps between bubbles stay click-through. Its left/top are set by JS
-   (panel-placement) so it always sits beside the pet, fully on-screen. */
+   (panel-placement) so it always sits beside the pet, fully on-screen. The
+   container's box is just the folder button — the list is positioned absolutely
+   relative to it, so showing/hiding the list never moves the button. */
 .bubbles {
   position: absolute;
   left: 0;
   top: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
-  pointer-events: none;
   width: max-content;
-  max-width: 300px;
+  pointer-events: none;
 }
 
 .bubbles > * {
@@ -78,9 +75,20 @@ body {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
 }
 
-.folder-icon {
-  font-size: 14px;
-  line-height: 1;
+/* Monochrome disclosure caret (CSS triangle), points right when collapsed and
+   rotates down when the folder is open. */
+.caret {
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid currentColor;
+  opacity: 0.7;
+  transition: transform 0.15s ease;
+}
+
+.folder-toggle[aria-expanded="true"] .caret {
+  transform: rotate(90deg);
 }
 
 .folder-count {
@@ -103,15 +111,24 @@ body {
 
 /* --- Bubble list --- */
 
+/* Absolutely positioned relative to the folder button so it can grow without
+   shifting the button. JS sets the open direction/alignment toward screen
+   centre, and an exact max-height so it always fits on the chosen side. */
 .bubble-list {
+  position: absolute;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-width: 100%;
-  max-height: 70vh;
+  width: max-content;
+  max-width: 300px;
   overflow-y: auto;
   pointer-events: auto;
 }
+
+.bubble-list[data-open-direction="down"] { top: calc(100% + 6px); }
+.bubble-list[data-open-direction="up"] { bottom: calc(100% + 6px); }
+.bubble-list[data-open-align="left"] { left: 0; right: auto; }
+.bubble-list[data-open-align="right"] { right: 0; left: auto; }
 
 .bubble {
   display: flex;
