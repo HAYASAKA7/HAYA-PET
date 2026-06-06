@@ -2,6 +2,30 @@ import { mapAiStateToPetAction } from "../../pet-core/src/atlas.js";
 import { getSessionPriorityRank } from "./priority.js";
 import { buildSessionSummary, buildStatusLabel, formatElapsed } from "./summaries.js";
 
+// Collapses the full AI-state vocabulary into the four progress kinds the
+// bubble panel renders: a spinning "working" circle, a "done" check mark (held
+// until the next turn refreshes it), a yellow "attention" cue when the session
+// needs the user, and a red "failed" cross. Unknown states fall back to a
+// neutral "idle" dot rather than guessing.
+const STATUS_KIND_BY_STATE = Object.freeze({
+  thinking: "working",
+  running_tool: "working",
+  editing_files: "working",
+  reviewing: "working",
+  compacting: "working",
+  waiting_user: "attention",
+  waiting_approval: "attention",
+  stale: "attention",
+  failed: "failed",
+  idle: "done",
+  success: "done",
+  exited: "done"
+});
+
+export function resolveBubbleStatusKind(state) {
+  return STATUS_KIND_BY_STATE[state] ?? "idle";
+}
+
 export function buildBubbleView(session, now = Date.now(), options = {}) {
   const elapsedMs = Math.max(0, numeric(now) - numeric(session.startedAt));
 
@@ -12,6 +36,7 @@ export function buildBubbleView(session, now = Date.now(), options = {}) {
     projectName: session.projectName,
     state: session.state,
     statusLabel: buildStatusLabel(session.state),
+    statusKind: resolveBubbleStatusKind(session.state),
     summary: buildSessionSummary(session),
     petAction: safePetAction(session.state),
     elapsedMs,

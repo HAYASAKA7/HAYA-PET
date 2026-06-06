@@ -224,7 +224,8 @@ async function runObservedCommand({
     command: ptyCommand,
     args: ptyArgs,
     cwd,
-    onData: (data) => observer.push(stripAnsi(data.toString()))
+    onData: (data) => observer.push(stripAnsi(data.toString())),
+    onInput: () => observer.noteInput()
   });
 
   await sendProtocolMessage(send, {

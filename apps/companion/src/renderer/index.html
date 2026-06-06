@@ -8,13 +8,10 @@
   </head>
   <body>
     <!-- Layer 1: the global pet overlay. -->
-    <canvas id="pet-canvas" width="192" height="208"></canvas>
+    <canvas id="pet-canvas" class="interactive" width="192" height="208"></canvas>
 
-    <!-- Layer 2: compact session bubbles. -->
+    <!-- Layer 2: ongoing-session progress bubbles + folder toggle. -->
     <div id="bubbles" class="bubbles"></div>
-
-    <!-- Layer 3: task talk window for the selected session. -->
-    <div id="talk-window" class="talk-window hidden"></div>
 
     <script type="module" src="pet-window.js"></script>
   </body>

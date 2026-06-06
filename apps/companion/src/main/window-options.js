@@ -1,7 +1,12 @@
-const DEFAULT_BOUNDS = Object.freeze({
+// The pet sprite cell is 192×208. The overlay window itself spans the whole
+// work area (so the bubble panel can sit on whichever side of the pet has room),
+// and is kept click-through except over the pet + bubbles.
+export const PET_SIZE = Object.freeze({
   width: 192,
   height: 208
 });
+
+const DEFAULT_BOUNDS = PET_SIZE;
 
 export function buildPetWindowOptions({ capabilities, bounds = DEFAULT_BOUNDS } = {}) {
   const overlaySupported = capabilities?.transparentOverlay === "required";

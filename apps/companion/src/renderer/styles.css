@@ -3,10 +3,11 @@
   --bubble-bg: rgba(24, 26, 32, 0.92);
   --bubble-fg: #f4f5f7;
   --accent: #6ea8fe;
-  --pill-waiting: #f0a35e;
-  --pill-running: #6ea8fe;
-  --pill-failed: #e5687a;
-  --pill-done: #5cd6a0;
+  --kind-working: #6ea8fe;
+  --kind-attention: #f0b429;
+  --kind-failed: #e5687a;
+  --kind-done: #5cd6a0;
+  --kind-idle: rgba(255, 255, 255, 0.4);
 }
 
 * {
@@ -25,8 +26,10 @@ body {
   user-select: none;
 }
 
-/* The pet hitbox is the only pointer-active region; empty space stays
-   click-through so the overlay does not block the workspace. */
+/* The pet sits at the window's top-left; the bubble panel fills the space to
+   its right. The window itself is large + transparent, and pointer events are
+   forwarded so only the marked .interactive regions catch clicks — everything
+   else passes through to the desktop (see pet-window.js). */
 #pet-canvas {
   position: absolute;
   left: 0;
@@ -39,36 +42,106 @@ body {
   cursor: grabbing;
 }
 
+/* Panel container is inert; its children opt back into pointer events so the
+   gaps between bubbles stay click-through. Its left/top are set by JS
+   (panel-placement) so it always sits beside the pet, fully on-screen. */
 .bubbles {
   position: absolute;
-  right: 8px;
-  bottom: 220px;
+  left: 0;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  pointer-events: none;
+  width: max-content;
+  max-width: 300px;
+}
+
+.bubbles > * {
+  pointer-events: auto;
+}
+
+/* --- Folder toggle --- */
+
+.folder-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bubble-bg);
+  color: var(--bubble-fg);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+.folder-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.folder-count {
+  font-weight: 700;
+  font-size: 11px;
+  opacity: 0.9;
+}
+
+.folder-summary {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--kind-idle);
+}
+
+.folder-summary[data-kind="working"] { background: var(--kind-working); }
+.folder-summary[data-kind="attention"] { background: var(--kind-attention); }
+.folder-summary[data-kind="failed"] { background: var(--kind-failed); }
+.folder-summary[data-kind="done"] { background: var(--kind-done); }
+
+/* --- Bubble list --- */
+
+.bubble-list {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-width: 260px;
+  max-width: 100%;
+  max-height: 70vh;
+  overflow-y: auto;
+  pointer-events: auto;
 }
 
 .bubble {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
   background: var(--bubble-bg);
   color: var(--bubble-fg);
   border-radius: 10px;
   padding: 8px 10px;
   font-size: 12px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
-  border: 1px solid transparent;
-  cursor: pointer;
+  border-left: 3px solid transparent;
+  min-width: 180px;
+  max-width: 280px;
 }
 
-.bubble.selected {
-  border-color: var(--accent);
+.bubble[data-kind="working"] { border-left-color: var(--kind-working); }
+.bubble[data-kind="attention"] { border-left-color: var(--kind-attention); }
+.bubble[data-kind="failed"] { border-left-color: var(--kind-failed); }
+.bubble[data-kind="done"] { border-left-color: var(--kind-done); }
+
+.bubble .body {
+  min-width: 0;
+  flex: 1;
 }
 
-.bubble .row {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  align-items: center;
+.bubble .title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .bubble .client {
@@ -79,124 +152,57 @@ body {
   opacity: 0.7;
 }
 
-.bubble .summary {
-  margin-top: 4px;
+.bubble .activity {
+  margin-top: 2px;
   opacity: 0.85;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.pill {
-  font-size: 10px;
-  padding: 2px 6px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.12);
-  white-space: nowrap;
+/* --- Status icons --- */
+
+.status-icon {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  border-radius: 50%;
 }
 
-.pill[data-state="waiting_approval"],
-.pill[data-state="waiting_user"],
-.pill[data-state="stale"] {
-  background: var(--pill-waiting);
-  color: #1c1300;
-}
-
-.pill[data-state="running_tool"],
-.pill[data-state="editing_files"],
-.pill[data-state="thinking"],
-.pill[data-state="reviewing"] {
-  background: var(--pill-running);
-  color: #001233;
-}
-
-.pill[data-state="failed"] {
-  background: var(--pill-failed);
-}
-
-.pill[data-state="success"] {
-  background: var(--pill-done);
+.status-icon[data-kind="done"] {
   color: #00210f;
+  background: var(--kind-done);
 }
 
-.talk-window {
-  position: absolute;
-  right: 8px;
-  bottom: 8px;
-  width: 320px;
-  background: var(--bubble-bg);
-  color: var(--bubble-fg);
-  border-radius: 12px;
-  padding: 12px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+.status-icon[data-kind="attention"] {
+  color: #2a1d00;
+  background: var(--kind-attention);
 }
 
-.talk-window.hidden {
-  display: none;
+.status-icon[data-kind="failed"] {
+  color: #2a0008;
+  background: var(--kind-failed);
 }
 
-.talk-window header {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  margin-bottom: 8px;
+.status-icon[data-kind="idle"] {
+  background: var(--kind-idle);
 }
 
-.talk-window .activity {
-  font-size: 12px;
-  opacity: 0.85;
-  margin-bottom: 8px;
+/* Working = a spinning pending circle (no glyph). */
+.status-icon[data-kind="working"] {
+  border: 2px solid rgba(110, 168, 254, 0.25);
+  border-top-color: var(--kind-working);
+  background: transparent;
+  animation: status-spin 0.8s linear infinite;
 }
 
-.talk-window .approval {
-  background: rgba(240, 163, 94, 0.16);
-  border: 1px solid var(--pill-waiting);
-  border-radius: 8px;
-  padding: 8px;
-  font-size: 12px;
-  margin-bottom: 8px;
-}
-
-.talk-window .composer {
-  display: flex;
-  gap: 6px;
-}
-
-.talk-window input[type="text"] {
-  flex: 1;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: var(--bubble-fg);
-  border-radius: 8px;
-  padding: 6px 8px;
-}
-
-.talk-window button {
-  background: var(--accent);
-  color: #001233;
-  border: none;
-  border-radius: 8px;
-  padding: 6px 10px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.talk-window button:disabled {
-  background: rgba(255, 255, 255, 0.12);
-  color: rgba(255, 255, 255, 0.4);
-  cursor: not-allowed;
-}
-
-.talk-window .controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 8px;
-}
-
-.talk-window .controls button {
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--bubble-fg);
-  font-weight: 500;
-  font-size: 11px;
+@keyframes status-spin {
+  to { transform: rotate(360deg); }
 }

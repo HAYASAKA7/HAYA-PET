@@ -18,7 +18,7 @@ export async function isPtyAvailable() {
   return Boolean(await loadPty());
 }
 
-export async function spawnPty({ command, args = [], cwd, env = process.env, onData, cols, rows } = {}) {
+export async function spawnPty({ command, args = [], cwd, env = process.env, onData, onInput, cols, rows } = {}) {
   const pty = await loadPty();
   if (!pty) {
     throw new Error("node-pty is not available");
@@ -52,7 +52,14 @@ export async function spawnPty({ command, args = [], cwd, env = process.env, onD
   if (typeof stdin.unref === "function") {
     stdin.unref();
   }
-  const forwardInput = (chunk) => child.write(chunk.toString("utf8"));
+  const forwardInput = (chunk) => {
+    if (onInput) {
+      // Let the observer know the user is typing, so it doesn't mistake the
+      // PTY's echo of these keystrokes for AI activity.
+      onInput(chunk);
+    }
+    child.write(chunk.toString("utf8"));
+  };
   stdin.on("data", forwardInput);
 
   const handleResize = () => {

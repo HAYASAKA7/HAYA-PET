@@ -92,3 +92,51 @@ test("with useHeuristics, unmatched output still counts as working", () => {
   observer.push("some neutral progress text\n");
   assert.equal(states.at(-1).state, "running_tool");
 });
+
+// --- User-typing echo suppression (working is AI activity, not the user) ---
+
+function makeClockedObserver(overrides = {}) {
+  const states = [];
+  let clock = 1000;
+  const observer = createOutputObserver({
+    clientId: "generic",
+    now: () => clock,
+    onState: (event) => states.push(event),
+    setTimer: () => 0,
+    clearTimer: () => {},
+    ...overrides
+  });
+  return { observer, states, tick: (ms) => { clock += ms; }, now: () => clock };
+}
+
+test("does NOT flip to working when output is an echo of recent keystrokes", () => {
+  const { observer, states } = makeClockedObserver({ inputGraceMs: 250 });
+  observer.noteInput();           // user pressed a key
+  observer.push("h");             // terminal echoes it back immediately
+  assert.equal(states.length, 0); // not AI activity -> no state change
+  assert.equal(observer.getState(), undefined);
+});
+
+test("treats output as working once the input-grace window has passed", () => {
+  const { observer, states, tick } = makeClockedObserver({ inputGraceMs: 250 });
+  observer.noteInput();
+  tick(400);                      // user has stopped typing; the AI now responds
+  observer.push("AI is generating a response...\n");
+  assert.equal(states.at(-1).state, "running_tool");
+});
+
+test("each keystroke re-arms the grace window so continuous typing never looks like work", () => {
+  const { observer, states, tick } = makeClockedObserver({ inputGraceMs: 250 });
+  for (let i = 0; i < 5; i++) {
+    observer.noteInput();
+    tick(100);          // typing faster than the grace window
+    observer.push("x"); // echo
+  }
+  assert.equal(states.filter((e) => e.state === "running_tool").length, 0);
+});
+
+test("output with no preceding input is still working (default behaviour unchanged)", () => {
+  const { observer, states } = makeClockedObserver({ inputGraceMs: 250 });
+  observer.push("autonomous AI output\n");
+  assert.equal(states.at(-1).state, "running_tool");
+});

@@ -6,12 +6,8 @@ import { createIpcServer } from "../../../../packages/daemon-core/src/ipc-server
 import { getDefaultPaths } from "../../../../packages/platform-core/src/paths.js";
 import { getPlatformCapabilities } from "../../../../packages/platform-core/src/capabilities.js";
 import { buildBubbleViews } from "../../../../packages/session-core/src/bubble-view.js";
-import { getAdapterCapabilities } from "../../../../packages/adapters/src/capabilities.js";
-import { resolveTaskControls } from "../../../../packages/task-core/src/controls.js";
-import { buildApprovalDecision } from "../../../../packages/task-core/src/approvals.js";
-import { buildTaskInputRequest } from "../../../../packages/task-core/src/replies.js";
-import { buildPetWindowOptions } from "./window-options.js";
-import { resolveSavedPosition, clampWindowBounds } from "./display-manager.js";
+import { buildPetWindowOptions, PET_SIZE } from "./window-options.js";
+import { resolveSavedPosition } from "./display-manager.js";
 import { setSelectedPet, updateGlobalPetPosition } from "./position-store.js";
 import { buildTrayMenu } from "./tray-menu.js";
 import { createStateFile } from "./state-file.js";
@@ -30,6 +26,12 @@ let ipcServer;
 let positionState;
 let pets = [];
 let runtime;
+// The overlay window spans this work area; the pet is positioned *inside* it at
+// `petLocal` (work-area-relative coords) and moved via CSS rather than by moving
+// the window, so the bubble panel can always be placed on-screen beside it.
+let currentWorkArea;
+let currentDisplayId;
+let petLocal = { x: 0, y: 0 };
 
 // Electron singleton: a second launch forwards to the running instance.
 if (!app.requestSingleInstanceLock()) {
@@ -76,8 +78,17 @@ async function bootstrap() {
 
 function createPetWindow() {
   const displays = listDisplays();
+  // Resolve the pet's saved on-screen position (pet-sized), which also tells us
+  // which display it belongs on. The window then spans that display's work area.
   const saved = resolveSavedPosition(positionState.globalPet, displays);
-  const { browserWindow } = buildPetWindowOptions({ capabilities, bounds: saved });
+  const display = displays.find((d) => d.id === saved.displayId)
+    ?? displays.find((d) => d.primary)
+    ?? displays[0];
+  currentWorkArea = display.workArea ?? display.bounds;
+  currentDisplayId = display.id;
+  petLocal = clampPetLocal({ x: saved.x - currentWorkArea.x, y: saved.y - currentWorkArea.y });
+
+  const { browserWindow } = buildPetWindowOptions({ capabilities, bounds: currentWorkArea });
 
   petWindow = new BrowserWindow({
     ...browserWindow,
@@ -90,12 +101,24 @@ function createPetWindow() {
   });
 
   petWindow.setVisibleOnAllWorkspaces?.(true, { visibleOnFullScreen: true });
+  // The whole work area is covered, so empty area MUST pass clicks through to the
+  // desktop; the renderer re-enables interaction (via ai-pet:set-mouse-ignore)
+  // only over the pet + bubbles.
+  petWindow.setIgnoreMouseEvents(true, { forward: true });
   petWindow.loadFile(join(__dirname, "..", "renderer", "index.html"));
-  petWindow.on("moved", persistWindowPosition);
   petWindow.webContents.on("did-finish-load", () => {
     sendPetConfig();
     pushSessions();
   });
+}
+
+function clampPetLocal(local) {
+  const maxX = Math.max(0, (currentWorkArea?.width ?? PET_SIZE.width) - PET_SIZE.width);
+  const maxY = Math.max(0, (currentWorkArea?.height ?? PET_SIZE.height) - PET_SIZE.height);
+  return {
+    x: Math.min(Math.max(local.x ?? 0, 0), maxX),
+    y: Math.min(Math.max(local.y ?? 0, 0), maxY)
+  };
 }
 
 function createTray() {
@@ -176,28 +199,20 @@ function handleTrayClick(item) {
 function registerRendererHandlers() {
   ipcMain.handle("ai-pet:list-sessions", () => buildSessionPayload());
 
-  ipcMain.handle("ai-pet:move-window", (_event, { x, y }) => {
+  // Fired on every cursor move while hovering the overlay, so use the
+  // fire-and-forget channel (no round-trip) to toggle click-through.
+  ipcMain.on("ai-pet:set-mouse-ignore", (_event, ignore) => {
     if (petWindow && !petWindow.isDestroyed()) {
-      petWindow.setPosition(Math.round(x), Math.round(y));
+      petWindow.setIgnoreMouseEvents(Boolean(ignore), { forward: true });
     }
   });
 
-  ipcMain.handle("ai-pet:save-position", async () => {
-    persistWindowPosition();
-    return positionState.globalPet;
-  });
-
-  ipcMain.handle("ai-pet:task-controls", (_event, { clientId, status }) => {
-    return resolveTaskControls(getAdapterCapabilities(clientId), status);
-  });
-
-  ipcMain.handle("ai-pet:reply", (_event, { sessionId, text }) => {
-    // Routing to adapters is a later phase; for now we record the intent.
-    return buildTaskInputRequest({ sessionId, inputId: `in_${Date.now()}`, text, createdAt: Date.now() });
-  });
-
-  ipcMain.handle("ai-pet:approval-decision", (_event, { sessionId, approvalId, decision }) => {
-    return buildApprovalDecision({ sessionId, approvalId, decision, decidedAt: Date.now() });
+  // The pet moves within the overlay (CSS), so the renderer reports its new
+  // work-area-relative position instead of moving the window.
+  ipcMain.handle("ai-pet:save-pet-position", async (_event, local) => {
+    petLocal = clampPetLocal(local ?? petLocal);
+    persistPetPosition();
+    return petLocal;
   });
 }
 
@@ -226,23 +241,30 @@ function sendPetConfig() {
     pet: selected
       ? { manifest: selected.manifest, spritesheetUrl: selected.spritesheetUrl }
       : undefined,
-    overlayMode: capabilities.transparentOverlay === "required" ? "transparent-overlay" : "fallback-window"
+    overlayMode: capabilities.transparentOverlay === "required" ? "transparent-overlay" : "fallback-window",
+    petPosition: petLocal
   });
 }
 
-function applyWindowPosition(position) {
-  positionState = updateGlobalPetPosition(positionState, position);
+function sendPetPosition() {
+  petWindow?.webContents.send("ai-pet:pet-position", petLocal);
 }
 
 let persistTimer;
-function persistWindowPosition() {
-  if (!petWindow || petWindow.isDestroyed()) {
+function persistPetPosition() {
+  if (!currentWorkArea) {
     return;
   }
 
-  const bounds = petWindow.getBounds();
-  const display = screen.getDisplayMatching(bounds);
-  applyWindowPosition({ ...bounds, displayId: String(display.id) });
+  // Store the pet's absolute on-screen top-left so it can be restored on the
+  // right display, mapping the in-window position back to screen coordinates.
+  positionState = updateGlobalPetPosition(positionState, {
+    x: currentWorkArea.x + petLocal.x,
+    y: currentWorkArea.y + petLocal.y,
+    width: PET_SIZE.width,
+    height: PET_SIZE.height,
+    displayId: currentDisplayId
+  });
 
   // Debounce disk writes during drag (positionSaveDebounce, plan section 27).
   clearTimeout(persistTimer);
@@ -264,11 +286,14 @@ function focusPet() {
 }
 
 function resetPosition() {
-  const displays = listDisplays();
-  const primary = displays.find((display) => display.primary) ?? displays[0];
-  const bounds = clampWindowBounds({ width: petWindow.getBounds().width, height: petWindow.getBounds().height }, primary);
-  petWindow.setBounds(bounds);
-  persistWindowPosition();
+  // Drop the pet back to the bottom-right corner of its work area.
+  const margin = 24;
+  petLocal = clampPetLocal({
+    x: (currentWorkArea?.width ?? PET_SIZE.width) - PET_SIZE.width - margin,
+    y: (currentWorkArea?.height ?? PET_SIZE.height) - PET_SIZE.height - margin
+  });
+  sendPetPosition();
+  persistPetPosition();
 }
 
 function setDisplayMode(displayMode) {

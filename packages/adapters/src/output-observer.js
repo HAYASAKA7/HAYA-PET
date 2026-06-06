@@ -8,6 +8,10 @@ const SUMMARY_MAX_LENGTH = 120;
 // the user) and revert to idle.
 const DEFAULT_IDLE_MS = 2000;
 const DEFAULT_ACTIVE_STATE = "running_tool";
+// How long after a keystroke we treat fresh output as the terminal echoing the
+// user's typing rather than the AI working. Each keystroke re-arms it, so a
+// burst of typing never registers as activity.
+const DEFAULT_INPUT_GRACE_MS = 250;
 
 const defaultSetTimer = (fn, ms) => {
   const timer = setTimeout(fn, ms);
@@ -40,6 +44,7 @@ export function createOutputObserver({
   idleState = "idle",
   activeState = DEFAULT_ACTIVE_STATE,
   useHeuristics = false,
+  inputGraceMs = DEFAULT_INPUT_GRACE_MS,
   setTimer = defaultSetTimer,
   clearTimer = defaultClearTimer
 } = {}) {
@@ -51,6 +56,13 @@ export function createOutputObserver({
   let buffer = "";
   let currentState;
   let idleTimer;
+  let lastInputAt;
+
+  // True while fresh output is most likely the terminal echoing the user's
+  // keystrokes (which a PTY mirrors back) rather than AI activity.
+  function isInputEcho() {
+    return inputGraceMs > 0 && lastInputAt !== undefined && now() - lastInputAt <= inputGraceMs;
+  }
 
   function emit(state, summary) {
     currentState = state;
@@ -78,12 +90,21 @@ export function createOutputObserver({
   }
 
   return {
+    noteInput() {
+      // Record that the user just typed; subsequent echoed output is not work.
+      lastInputAt = now();
+    },
+
     push(chunk) {
       const text = String(chunk);
       buffer += text;
 
+      // Echoed keystrokes are the user, not the AI — don't classify or count
+      // them as activity, but keep the buffer bounded.
+      const echo = isInputEcho();
+
       let matched = false;
-      if (useHeuristics) {
+      if (useHeuristics && !echo) {
         let newlineIndex = buffer.indexOf("\n");
         while (newlineIndex !== -1) {
           const line = buffer.slice(0, newlineIndex);
@@ -98,8 +119,8 @@ export function createOutputObserver({
           newlineIndex = buffer.indexOf("\n");
         }
       } else {
-        // Activity mode: we don't classify lines, so drop completed ones to keep
-        // the buffer bounded.
+        // Activity mode (or echo): we don't classify lines, so drop completed
+        // ones to keep the buffer bounded.
         const lastNewline = buffer.lastIndexOf("\n");
         if (lastNewline !== -1) {
           buffer = buffer.slice(lastNewline + 1);
@@ -107,7 +128,7 @@ export function createOutputObserver({
       }
 
       const hadOutput = /\S/.test(text);
-      if (hadOutput) {
+      if (hadOutput && !echo) {
         if (!matched && currentState !== activeState) {
           emit(activeState, "working");
         }

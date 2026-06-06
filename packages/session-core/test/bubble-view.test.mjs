@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "../../../test/harness.mjs";
-import { buildBubbleView, buildBubbleViews } from "../src/bubble-view.js";
+import { buildBubbleView, buildBubbleViews, resolveBubbleStatusKind } from "../src/bubble-view.js";
 
 const baseSession = {
   sessionId: "sess_a",
@@ -42,4 +42,38 @@ test("orders bubbles by session priority then recency", () => {
 test("marks the selected/pinned session", () => {
   const views = buildBubbleViews([baseSession], 6_000, { selectedSessionId: "sess_a" });
   assert.equal(views[0].selected, true);
+});
+
+test("resolves working states to the 'working' status kind (spinner)", () => {
+  for (const state of ["thinking", "running_tool", "editing_files", "reviewing", "compacting"]) {
+    assert.equal(resolveBubbleStatusKind(state), "working", state);
+  }
+});
+
+test("resolves attention states to the 'attention' status kind (yellow)", () => {
+  for (const state of ["waiting_user", "waiting_approval", "stale"]) {
+    assert.equal(resolveBubbleStatusKind(state), "attention", state);
+  }
+});
+
+test("resolves failure to the 'failed' status kind (red cross)", () => {
+  assert.equal(resolveBubbleStatusKind("failed"), "failed");
+});
+
+test("resolves idle/finished states to the 'done' status kind (check mark)", () => {
+  for (const state of ["idle", "success", "exited"]) {
+    assert.equal(resolveBubbleStatusKind(state), "done", state);
+  }
+});
+
+test("falls back to a neutral 'idle' kind for unknown states", () => {
+  assert.equal(resolveBubbleStatusKind("totally-unknown"), "idle");
+  assert.equal(resolveBubbleStatusKind(undefined), "idle");
+});
+
+test("exposes statusKind on the bubble view model", () => {
+  assert.equal(buildBubbleView({ ...baseSession, state: "running_tool" }, 6_000).statusKind, "working");
+  assert.equal(buildBubbleView({ ...baseSession, state: "waiting_approval" }, 6_000).statusKind, "attention");
+  assert.equal(buildBubbleView({ ...baseSession, state: "failed" }, 6_000).statusKind, "failed");
+  assert.equal(buildBubbleView({ ...baseSession, state: "idle" }, 6_000).statusKind, "done");
 });
