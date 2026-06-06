@@ -3,6 +3,16 @@
   "version": "0.1.0",
   "type": "module",
   "description": "Generic AI CLI pet runtime foundation.",
+  "license": "MIT",
+  "author": "Ai Hayasaka",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HAYASAKA7/HAYA-PET.git"
+  },
+  "homepage": "https://github.com/HAYASAKA7/HAYA-PET#readme",
+  "bugs": {
+    "url": "https://github.com/HAYASAKA7/HAYA-PET/issues"
+  },
   "bin": {
     "haya-pet": "apps/cli/src/haya-pet.js"
   },
