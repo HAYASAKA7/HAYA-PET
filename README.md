@@ -243,6 +243,26 @@ While the command runs, a **session bubble** appears (client · project · statu
 and the pet reflects the highest-priority session. On exit the pet shows success
 (jump) or failure.
 
+#### Live activity status (default)
+
+The wrapper runs the CLI through a pseudo-terminal and reflects activity from its
+output — **on by default**. It is **activity-based**: while the AI is producing
+output the pet shows *working* (running), and after a short quiet window it
+returns to *idle*. Success/failure come from the real exit code (a one-shot
+reaction), never from scraping the word "error" out of the output.
+
+```powershell
+ai-pet run --client claude-code -- claude   # live status, no extra flag
+ai-pet run --no-observe -- claude           # opt out: lifecycle only
+```
+
+It uses the optional `node-pty` dependency (installed automatically when
+available) and never downgrades your terminal — the CLI keeps its full
+interactive TTY. If `node-pty` isn't installed, it transparently falls back to
+plain lifecycle tracking. Keyword heuristics (detecting specific states like
+"waiting for approval" from output text) are available but opt-in, since
+substring matching is unreliable on rich TUIs.
+
 > **Order matters:** start the companion first. If it isn't running, your wrapped
 > command still runs normally and keeps its exit code — the pet just won't
 > reflect it.
@@ -278,6 +298,27 @@ dotnet build -c Release
 | Pet shows a blue placeholder box | No spritesheet found — add one (step 4); behaviour is otherwise correct. |
 | Pet is off-screen | Tray menu → **Reset Position**. |
 | `ai-pet pets` shows "No pets found" | Add a pet folder with **both** `pet.json` and a spritesheet to a search path. |
+| `npm start` → `ENOENT … electron\path.txt` | Electron's postinstall extraction was interrupted/corrupted. See "Fixing a broken Electron install" below. |
+
+#### Fixing a broken Electron install
+
+If `npm start` fails with `ENOENT … node_modules\electron\path.txt`, the Electron
+binary download succeeded but extraction left `dist/` empty. The cached zip is
+fine, so re-extract it without re-downloading (PowerShell):
+
+```powershell
+$cache = Get-ChildItem "$env:LOCALAPPDATA\electron\Cache" -Recurse -Filter "electron-*.zip" |
+         Sort-Object LastWriteTime -Descending | Select-Object -First 1
+$dist  = "node_modules\electron\dist"          # run from the repo root
+Remove-Item -Recurse -Force $dist -ErrorAction SilentlyContinue
+New-Item -ItemType Directory $dist | Out-Null
+Expand-Archive -Path $cache.FullName -DestinationPath $dist -Force
+Set-Content "node_modules\electron\path.txt" "electron.exe" -NoNewline
+node_modules\.bin\electron --version            # should print the version
+```
+
+If `electron.exe` is missing even after a clean `Expand-Archive`, your antivirus
+likely quarantined it — allow `node_modules\electron\dist\electron.exe` and retry.
 
 See [`apps/companion/README.md`](apps/companion/README.md) for companion internals
 and [`docs/cross-os-qa.md`](docs/cross-os-qa.md) for the cross-OS test matrix.
@@ -345,11 +386,13 @@ The reply button never blindly types into a terminal — wrapper-only clients sh
 ## Status & roadmap
 
 The shared core, CLI wrapper, daemon IPC, adapters, task talk core, Electron
-shell, and the Windows terminal helper are implemented and tested. In progress:
+shell, the Windows terminal helper, and PTY-based live activity observation
+(`--observe`) are implemented and tested. In progress:
 
-- Real PTY observation via a `node-pty` integration package.
 - Bidirectional IPC so the daemon routes replies/approvals back to the wrapper.
 - macOS (Swift/AppKit) and Linux X11 (Xlib) terminal helpers.
+- A larger mouse-pass-through overlay window so bubbles / the task talk window
+  sit beside the pet instead of on top of it.
 - Production overlay/IPC validation across all platforms.
 
 See [`PROGRESS.md`](PROGRESS.md) for the detailed log.

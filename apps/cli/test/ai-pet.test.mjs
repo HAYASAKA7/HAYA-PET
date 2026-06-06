@@ -6,25 +6,70 @@ import { parseAiPetArgs, runAiPet } from "../src/ai-pet.js";
 
 test("parses generic run command arguments", () => {
   assert.deepEqual(
-    parseAiPetArgs(["run", "--client", "generic", "--", "node", "-e", "process.exit(0)"]),
+    parseAiPetArgs(["run", "--no-observe", "--client", "generic", "--", "node", "-e", "process.exit(0)"]),
     {
       command: "run",
       clientId: "generic",
+      observe: false,
       childCommand: "node",
       childArgs: ["-e", "process.exit(0)"]
     }
   );
 });
 
+test("observation is on by default and --no-observe opts out", () => {
+  assert.equal(parseAiPetArgs(["run", "--client", "codex"]).observe, true);
+  assert.equal(parseAiPetArgs(["run", "--no-observe", "--client", "codex"]).observe, false);
+
+  const parsedWithCommand = parseAiPetArgs(["run", "--", "claude", "--resume"]);
+  assert.equal(parsedWithCommand.observe, true);
+  assert.equal(parsedWithCommand.childCommand, "claude");
+  assert.deepEqual(parsedWithCommand.childArgs, ["--resume"]);
+});
+
 test("defaults run command client to generic", () => {
   assert.equal(parseAiPetArgs(["run", "--", "node"]).clientId, "generic");
 });
 
-test("rejects unsupported commands and missing child command separator", () => {
+test("falls back to the client default command when no -- is given", () => {
+  assert.deepEqual(parseAiPetArgs(["run", "--no-observe", "--client", "codex"]), {
+    command: "run",
+    clientId: "codex",
+    observe: false,
+    childCommand: "codex",
+    childArgs: []
+  });
+  assert.equal(parseAiPetArgs(["run", "--client", "claude-code"]).childCommand, "claude");
+  assert.equal(parseAiPetArgs(["run", "--client", "antigravity"]).childCommand, "antigravity");
+});
+
+test("still requires -- for generic (no default command)", () => {
+  assert.throws(() => parseAiPetArgs(["run", "--client", "generic"]), /no default command/);
+});
+
+test("accepts a bare command without -- (shells may strip the separator)", () => {
+  assert.deepEqual(parseAiPetArgs(["run", "--no-observe", "node", "-v"]), {
+    command: "run",
+    clientId: "generic",
+    observe: false,
+    childCommand: "node",
+    childArgs: ["-v"]
+  });
+  // The shape PowerShell's npm shim produces after stripping `--`:
+  assert.deepEqual(parseAiPetArgs(["run", "--no-observe", "--client", "claude-code", "claude", "--resume"]), {
+    command: "run",
+    clientId: "claude-code",
+    observe: false,
+    childCommand: "claude",
+    childArgs: ["--resume"]
+  });
+});
+
+test("rejects unsupported commands and missing arguments", () => {
   assert.throws(() => parseAiPetArgs(["status"]), /Unsupported ai-pet command: status/);
-  assert.throws(() => parseAiPetArgs(["run", "node"]), /run requires -- before the child command/);
   assert.throws(() => parseAiPetArgs(["run", "--client"]), /--client requires a value/);
   assert.throws(() => parseAiPetArgs(["run", "--"]), /run requires a child command/);
+  assert.throws(() => parseAiPetArgs(["run", "--bogus"]), /Unknown run option/);
 });
 
 test("runs parsed command through injectable generic runner", async () => {
@@ -62,7 +107,8 @@ test("runs command through daemon IPC when no send function is injected", async 
 
   try {
     const result = await runAiPet(
-      ["run", "--client", "generic", "--", process.execPath, "-e", "process.exit(0)"],
+      // --no-observe keeps this lifecycle test on the deterministic plain path.
+      ["run", "--no-observe", "--client", "generic", "--", process.execPath, "-e", "process.exit(0)"],
       {
         cwd: process.cwd(),
         stdio: "ignore",

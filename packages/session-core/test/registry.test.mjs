@@ -128,6 +128,29 @@ test("marks stale non-exited sessions after heartbeat timeout", () => {
   assert.equal(registry.getSession("finished").state, "exited");
 });
 
+test("drops sessions with no activity past the drop timeout", () => {
+  const registry = createSessionRegistry({ staleAfterMs: 100, dropAfterMs: 500 });
+  registry.applyMessage(registerMessage("dead", { startedAt: 1000 }));
+
+  // Past staleAfterMs but within dropAfterMs -> marked stale, still present.
+  registry.markStaleSessions(1200);
+  assert.equal(registry.getSession("dead").state, "stale");
+
+  // Marking stale must not refresh updatedAt, so the drop clock still elapses.
+  registry.markStaleSessions(1600);
+  assert.equal(registry.getSession("dead"), undefined);
+  assert.deepEqual(registry.listSessions(), []);
+});
+
+test("does not re-mark an already-stale session every sweep", () => {
+  const registry = createSessionRegistry({ staleAfterMs: 100, dropAfterMs: 100000 });
+  registry.applyMessage(registerMessage("idle1", { startedAt: 1000 }));
+
+  assert.deepEqual(registry.markStaleSessions(1200).map((s) => s.sessionId), ["idle1"]);
+  // already stale -> not reported again
+  assert.deepEqual(registry.markStaleSessions(1300), []);
+});
+
 test("rejects updates for unknown sessions", () => {
   const registry = createSessionRegistry();
 

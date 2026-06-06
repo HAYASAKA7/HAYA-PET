@@ -9,9 +9,14 @@ export function parsePetManifest(input) {
 
   const errors = [];
 
+  // Accept both this runtime's canonical fields and the Codex Desktop Pet
+  // field names (displayName / spritesheetPath). Canonical wins when both exist.
+  const name = input.name ?? input.displayName;
+  const spritesheet = input.spritesheet ?? input.spritesheetPath;
+
   requireNonEmptyString(errors, input.id, "id");
-  requireNonEmptyString(errors, input.name, "name");
-  requireNonEmptyString(errors, input.spritesheet, "spritesheet");
+  requireNonEmptyString(errors, name, "name");
+  requireNonEmptyString(errors, spritesheet, "spritesheet");
 
   const cellWidth = input.cellWidth ?? CELL_WIDTH;
   const cellHeight = input.cellHeight ?? CELL_HEIGHT;
@@ -36,8 +41,8 @@ export function parsePetManifest(input) {
     errors: [],
     manifest: {
       id: input.id,
-      name: input.name,
-      spritesheet: input.spritesheet,
+      name,
+      spritesheet,
       cellWidth,
       cellHeight,
       frameDurationMs,

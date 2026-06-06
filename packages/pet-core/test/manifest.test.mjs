@@ -23,6 +23,33 @@ test("parses a minimal pet manifest with defaults", () => {
   assert.equal(result.manifest.frameDurationMs, DEFAULT_FRAME_DURATION_MS);
 });
 
+test("accepts Codex-style displayName and spritesheetPath aliases", () => {
+  const result = parsePetManifest({
+    id: "toru-pixel",
+    displayName: "Toru Pixel",
+    description: "A pixel pet",
+    spritesheetPath: "spritesheet.webp"
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.manifest.id, "toru-pixel");
+  assert.equal(result.manifest.name, "Toru Pixel");
+  assert.equal(result.manifest.spritesheet, "spritesheet.webp");
+});
+
+test("prefers canonical fields over aliases when both are present", () => {
+  const result = parsePetManifest({
+    id: "p",
+    name: "Canonical",
+    displayName: "Alias",
+    spritesheet: "real.webp",
+    spritesheetPath: "alias.webp"
+  });
+
+  assert.equal(result.manifest.name, "Canonical");
+  assert.equal(result.manifest.spritesheet, "real.webp");
+});
+
 test("rejects manifests missing required fields", () => {
   const result = parsePetManifest({ name: "No Id" });
 

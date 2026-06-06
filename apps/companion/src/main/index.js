@@ -62,6 +62,9 @@ async function bootstrap() {
 
   const sweep = setInterval(() => {
     runtime.markStaleSessions(Date.now());
+    // Refresh the renderer so dropped (dead/finished) sessions disappear and the
+    // pet settles to idle even when no new session event fires.
+    pushSessions();
   }, STALE_SWEEP_INTERVAL_MS);
   sweep.unref?.();
 

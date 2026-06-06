@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { runGenericCommand as defaultRunGenericCommand } from "../../../packages/cli-core/src/run-command.js";
 import { createIpcClient as defaultCreateIpcClient } from "../../../packages/daemon-core/src/ipc-server.js";
@@ -6,6 +7,7 @@ import { getDefaultPaths } from "../../../packages/platform-core/src/paths.js";
 import { discoverPets as defaultDiscoverPets } from "../../../packages/pet-core/src/discovery.js";
 import { createStateFile as defaultCreateStateFile } from "../../../packages/app-state/src/state-file.js";
 import { getSelectedPetId, setSelectedPet } from "../../../packages/app-state/src/state.js";
+import { getAdapterInfo } from "../../../packages/adapters/src/adapter-info.js";
 
 const CLIENT_DISPLAY_NAMES = Object.freeze({
   generic: "Generic",
@@ -53,6 +55,7 @@ async function runRunCommand(parsed, dependencies) {
       cwd: dependencies.cwd ?? process.cwd(),
       clientId: parsed.clientId,
       clientDisplayName: CLIENT_DISPLAY_NAMES[parsed.clientId] ?? parsed.clientId,
+      observe: parsed.observe,
       heartbeatIntervalMs: dependencies.heartbeatIntervalMs,
       now: dependencies.now,
       stdio: dependencies.stdio,
@@ -146,13 +149,17 @@ function parsePetsArgs(args) {
 
 function parseRunArgs(args) {
   let clientId = "generic";
-  let separatorIndex = -1;
+  let observe = true; // live PTY observation is on by default; --no-observe opts out
+  let childStart = -1;
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
 
+    // Explicit separator: everything after it is the child command. `--` is
+    // optional — some shells (PowerShell's npm .ps1 shim) strip a lone `--`
+    // before it reaches the CLI, so we also accept a bare command word below.
     if (arg === "--") {
-      separatorIndex = index;
+      childStart = index + 1;
       break;
     }
 
@@ -167,27 +174,54 @@ function parseRunArgs(args) {
       continue;
     }
 
-    if (!arg.startsWith("-")) {
-      throw new Error("run requires -- before the child command");
+    if (arg === "--observe") {
+      observe = true;
+      continue;
     }
 
-    throw new Error(`Unknown run option: ${arg}`);
+    if (arg === "--no-observe") {
+      observe = false;
+      continue;
+    }
+
+    if (arg.startsWith("-")) {
+      throw new Error(`Unknown run option: ${arg}`);
+    }
+
+    // First bare positional starts the child command (no `--` required).
+    childStart = index;
+    break;
   }
 
-  if (separatorIndex === -1) {
-    throw new Error("run requires -- before the child command");
+  if (childStart === -1) {
+    // No command given: fall back to the client's declared default command
+    // (e.g. `ai-pet run --client codex` launches `codex`).
+    const defaultCommand = getAdapterInfo(clientId)?.defaultCommand;
+    if (!defaultCommand) {
+      throw new Error(
+        `run requires a command (client "${clientId}" has no default command; pass one after the client)`
+      );
+    }
+
+    return { command: "run", clientId, observe, childCommand: defaultCommand, childArgs: [] };
   }
 
-  const childArgs = args.slice(separatorIndex + 1);
+  const childArgs = args.slice(childStart);
   const childCommand = childArgs.shift();
 
   if (!childCommand) {
+    // `--` was the last token; fall back to the default command if any.
+    const defaultCommand = getAdapterInfo(clientId)?.defaultCommand;
+    if (defaultCommand) {
+      return { command: "run", clientId, observe, childCommand: defaultCommand, childArgs: [] };
+    }
     throw new Error("run requires a child command");
   }
 
   return {
     command: "run",
     clientId,
+    observe,
     childCommand,
     childArgs
   };
@@ -229,12 +263,32 @@ async function noopSend() {}
 async function noopClose() {}
 
 if (isDirectRun(import.meta.url, process.argv[1])) {
-  main().catch((error) => {
-    console.error(error.message);
-    process.exitCode = 1;
-  });
+  main()
+    .catch((error) => {
+      console.error(error.message);
+      process.exitCode = 1;
+    })
+    .finally(() => {
+      // The wrapped command has finished and all messages are flushed by now.
+      // Exit explicitly: a PTY (observe mode) can otherwise keep the event loop
+      // alive after the child exits.
+      process.exit(process.exitCode ?? 0);
+    });
 }
 
 function isDirectRun(moduleUrl, scriptPath) {
-  return scriptPath && fileURLToPath(moduleUrl) === scriptPath;
+  if (!scriptPath) {
+    return false;
+  }
+
+  const modulePath = fileURLToPath(moduleUrl);
+
+  // Resolve symlinks on both sides so the guard still fires when the CLI is
+  // invoked through an `npm link` shim (argv[1] is the symlink path, while
+  // import.meta.url resolves to the real file).
+  try {
+    return realpathSync(modulePath) === realpathSync(scriptPath);
+  } catch {
+    return modulePath === scriptPath;
+  }
 }

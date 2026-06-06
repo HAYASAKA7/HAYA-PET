@@ -2,6 +2,7 @@ import { assertProtocolMessage } from "../../protocol/src/messages.js";
 import { selectPrioritySession } from "./priority.js";
 
 const DEFAULT_STALE_AFTER_MS = 30_000;
+const DEFAULT_DROP_AFTER_MS = 120_000;
 
 export function createSessionRegistry(options = {}) {
   return new SessionRegistry(options);
@@ -11,6 +12,7 @@ class SessionRegistry {
   constructor(options) {
     this.sessions = new Map();
     this.staleAfterMs = options.staleAfterMs ?? DEFAULT_STALE_AFTER_MS;
+    this.dropAfterMs = options.dropAfterMs ?? DEFAULT_DROP_AFTER_MS;
   }
 
   applyMessage(message) {
@@ -49,8 +51,17 @@ class SessionRegistry {
 
     const staleSessions = [];
 
-    for (const session of this.sessions.values()) {
-      if (session.state === "exited") {
+    for (const [sessionId, session] of this.sessions) {
+      // Drop sessions with no real activity for dropAfterMs (dead wrappers that
+      // never sent unregister, or long-finished sessions) so the pet does not
+      // sit on a phantom session forever. The drop clock is based on the last
+      // real update — marking stale must NOT bump updatedAt, or it never elapses.
+      if (now - session.updatedAt > this.dropAfterMs) {
+        this.sessions.delete(sessionId);
+        continue;
+      }
+
+      if (session.state === "exited" || session.state === "stale") {
         continue;
       }
 
@@ -59,7 +70,6 @@ class SessionRegistry {
         session.source = "wrapper";
         session.confidence = 0.3;
         session.summary = "heartbeat stale";
-        session.updatedAt = now;
         staleSessions.push(snapshotSession(session));
       }
     }

@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { basename } from "node:path";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { basename, join } from "node:path";
 import { test } from "../../../test/harness.mjs";
 import { runGenericCommand } from "../src/run-command.js";
 
@@ -43,9 +45,9 @@ test("emits generic command lifecycle messages and preserves exit code", async (
   assert.equal(messages[0].pid, result.pid);
 
   const stateMessage = messages.find((message) => message.type === "state");
-  assert.equal(stateMessage.state, "running_tool");
+  assert.equal(stateMessage.state, "idle");
   assert.equal(stateMessage.source, "wrapper");
-  assert.equal(stateMessage.summary, "process running");
+  assert.equal(stateMessage.summary, "session started");
 
   assert.ok(messages.some((message) => message.type === "heartbeat"));
 
@@ -53,6 +55,77 @@ test("emits generic command lifecycle messages and preserves exit code", async (
   assert.equal(unregister.type, "unregister");
   assert.equal(unregister.sessionId, "sess_test");
   assert.equal(unregister.exitCode, 7);
+});
+
+test("launches a Windows .cmd shim via the shell and reports a valid pid", async () => {
+  if (process.platform !== "win32") {
+    return; // shell resolution of .cmd shims is Windows-specific
+  }
+
+  const dir = mkdtempSync(join(tmpdir(), "ai-pet-cmd-"));
+  const cmdPath = join(dir, "fake-cli.cmd");
+  writeFileSync(cmdPath, "@echo off\r\nexit /b 5\r\n");
+
+  try {
+    const messages = [];
+    const result = await runGenericCommand({
+      command: cmdPath,
+      args: [],
+      cwd: process.cwd(),
+      sessionId: "sess_cmd",
+      heartbeatIntervalMs: 50,
+      now: createClock(),
+      stdio: "ignore",
+      send: async (message) => messages.push(message)
+    });
+
+    assert.equal(result.exitCode, 5);
+    const register = messages.find((message) => message.type === "register");
+    assert.ok(register, "should send a register message");
+    assert.ok(Number.isInteger(register.pid) && register.pid > 0, "pid must be a positive integer");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("observe mode infers state from PTY output via the observer", async () => {
+  const messages = [];
+  const ESC = String.fromCharCode(27);
+
+  const result = await runGenericCommand({
+    command: "claude",
+    args: [],
+    cwd: process.cwd(),
+    clientId: "claude-code",
+    clientDisplayName: "Claude Code",
+    sessionId: "sess_obs",
+    heartbeatIntervalMs: 1000,
+    now: createClock(),
+    observe: true,
+    send: async (message) => messages.push(message),
+    // Injected PTY: emits a tool-use line (with ANSI noise), then exits 0.
+    spawnPty: async ({ onData }) => {
+      onData(`${ESC}[mRunning tests${ESC}[0m\r\n`);
+      return {
+        pid: 4321,
+        exit: new Promise((resolve) => setTimeout(() => resolve({ exitCode: 0 }), 10)),
+        write() {},
+        kill() {}
+      };
+    }
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.pid, 4321);
+
+  const register = messages.find((m) => m.type === "register");
+  assert.equal(register.pid, 4321);
+
+  const inferred = messages.find((m) => m.type === "state" && m.source === "pty_output");
+  assert.ok(inferred, "should emit a state inferred from PTY output");
+  assert.equal(inferred.state, "running_tool");
+
+  assert.equal(messages.at(-1).type, "unregister");
 });
 
 test("maps successful generic command exit to a success state before unregister", async () => {

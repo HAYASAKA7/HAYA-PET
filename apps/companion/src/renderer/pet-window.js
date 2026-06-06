@@ -2,7 +2,7 @@
 // state-mapping logic all come from the unit-tested pure packages; this module
 // is the browser glue that draws frames and forwards pointer gestures.
 
-import { CELL_HEIGHT, CELL_WIDTH, getFrameRect, mapAiStateToPetAction } from "../../../../packages/pet-core/src/atlas.js";
+import { CELL_HEIGHT, CELL_WIDTH, getFrameRect } from "../../../../packages/pet-core/src/atlas.js";
 import { getActionDurationMs, getFrameAt } from "../../../../packages/pet-core/src/animator.js";
 import {
   clearDragAction,
@@ -12,6 +12,7 @@ import {
   setStableAction,
   triggerOneShot
 } from "../../../../packages/pet-core/src/animation-state.js";
+import { resolveCompanionPetState } from "../../../../packages/session-core/src/pet-state.js";
 import { createInteractionController } from "./interaction-controller.js";
 import { createBubbleList } from "./session-bubbles.js";
 import { createTalkWindow } from "./task-talk-window.js";
@@ -20,7 +21,18 @@ const bridge = window.aiPet;
 const canvas = document.getElementById("pet-canvas");
 const ctx = canvas.getContext("2d");
 
-const controller = createInteractionController();
+const controller = createInteractionController({
+  // Click is deferred so a double-click never also fires a wave.
+  onAction: (event) => {
+    if (event.type === "click") {
+      playOneShot("waving");
+      openSelectedTalkWindow("peek");
+    } else if (event.type === "double-click") {
+      playOneShot("jumping");
+      openSelectedTalkWindow("expanded");
+    }
+  }
+});
 const bubbleList = createBubbleList(document.getElementById("bubbles"), { onSelect: selectSession });
 const talkWindow = createTalkWindow(document.getElementById("talk-window"), bridge);
 
@@ -32,6 +44,7 @@ let actionStart = 0;
 let dragOffset = { x: 0, y: 0 };
 let latestBubbles = [];
 let selectedSessionId;
+let previousSessionStates = {};
 
 function setupPet(config) {
   if (config?.pet?.manifest) {
@@ -104,35 +117,35 @@ canvas.addEventListener("pointermove", (event) => {
 });
 
 canvas.addEventListener("pointerup", (event) => {
+  // Click / double-click are delivered asynchronously via onAction; only the
+  // synchronous drag-end is handled here.
   const result = controller.pointerUp({ x: event.screenX, y: event.screenY, time: performance.now() });
-  if (!result) {
-    return;
-  }
-
-  if (result.type === "drag-end") {
+  if (result?.type === "drag-end") {
     animationState = clearDragAction(animationState);
     bridge?.savePosition?.();
-  } else if (result.type === "click") {
-    playOneShot("waving");
-    openSelectedTalkWindow("peek");
-  } else if (result.type === "double-click") {
-    playOneShot("jumping");
-    openSelectedTalkWindow("expanded");
   }
 });
 
 // --- Session wiring ---
 
 function applySessions(payload) {
-  latestBubbles = payload?.bubbles ?? [];
-  bubbleList.render(latestBubbles);
+  const { stableAction, oneShots, activeBubbles, nextStates } = resolveCompanionPetState({
+    bubbles: payload?.bubbles ?? [],
+    prioritySessionId: payload?.prioritySessionId,
+    previousStates: previousSessionStates
+  });
+  previousSessionStates = nextStates;
 
-  const priority = latestBubbles.find((bubble) => bubble.sessionId === payload?.prioritySessionId) ?? latestBubbles[0];
-  if (priority) {
-    animationState = setStableAction(animationState, safeAction(priority.state));
-  } else {
-    animationState = setStableAction(animationState, "idle");
+  // Only active sessions appear as bubbles; finished ones drop off and the pet
+  // settles back to idle (after any success celebration).
+  latestBubbles = activeBubbles;
+  bubbleList.render(activeBubbles);
+
+  for (const action of oneShots) {
+    playOneShot(action);
   }
+
+  animationState = setStableAction(animationState, stableAction);
 }
 
 function selectSession(bubble) {
@@ -145,14 +158,6 @@ function openSelectedTalkWindow(mode) {
   if (bubble) {
     selectedSessionId = bubble.sessionId;
     talkWindow.open(bubble, mode);
-  }
-}
-
-function safeAction(state) {
-  try {
-    return mapAiStateToPetAction(state);
-  } catch {
-    return "idle";
   }
 }
 
