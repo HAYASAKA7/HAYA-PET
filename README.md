@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🐾 AI Pet
+# 🐾 Haya Pet
 
 ### One desktop companion for all your AI terminal agents
 
@@ -11,7 +11,7 @@ runtime with client adapters.
 <!-- HERO SCREENSHOT: drop a wide shot at docs/screenshots/hero.png
      (the pet on the desktop with a couple of session bubbles) -->
 
-![AI Pet on the desktop](docs/screenshots/hero.png)
+![Haya Pet on the desktop](docs/screenshots/hero.png)
 
 </div>
 
@@ -19,7 +19,7 @@ runtime with client adapters.
 
 ## What is this?
 
-Most "desktop pet for an AI tool" projects build one pet per tool. AI Pet does
+Most "desktop pet for an AI tool" projects build one pet per tool. Haya Pet does
 the opposite: it is **one AI Terminal Pet Runtime** that many AI clients plug
 into through adapters.
 
@@ -32,7 +32,7 @@ Antigravity CLI → infra repo
 Aider           → docs repo
 ```
 
-AI Pet watches all of them and presents one ambient interface:
+Haya Pet watches all of them and presents one ambient interface:
 
 - **One global pet** — reflects the selected or most urgent AI session; clickable,
   draggable, and position-persistent like a real desktop companion.
@@ -52,7 +52,7 @@ AI Pet watches all of them and presents one ambient interface:
   (`thinking`, `running_tool`, `waiting_approval`, `reviewing`, `failed`, …).
 - 🧩 **Client adapters** with tiered support (process wrapper → PTY observer →
   log/state → official plugin) so the daemon never bakes in client-specific logic.
-- 🚀 **Zero-setup launch** — `ai-pet run …` auto-starts the overlay; no separate
+- 🚀 **Zero-setup launch** — `haya-pet run …` auto-starts the overlay; no separate
   daemon to manage.
 - 🖼️ **Codex-compatible pet assets** (1536×1872 sprite atlas, 9 actions).
 - 🔒 **Local-only & private** — no prompts, files, or screenshots leave your machine.
@@ -100,7 +100,7 @@ AI Pet watches all of them and presents one ambient interface:
 **From npm** *(once published — recommended for users):*
 
 ```bash
-npm install -g ai-pet     # exposes the `ai-pet` command globally
+npm install -g @hayasaka7/haya-pet     # exposes the `haya-pet` command globally
 ```
 
 **From source** *(current):*
@@ -109,23 +109,23 @@ npm install -g ai-pet     # exposes the `ai-pet` command globally
 git clone <repo-url> haya-pet
 cd haya-pet
 npm install
-npm link                  # makes `ai-pet` available everywhere
+npm link                  # makes `haya-pet` available everywhere
 ```
 
-Prefer not to link globally? Call it directly anywhere you'd type `ai-pet`:
-`node <repo>/apps/cli/src/ai-pet.js`.
+Prefer not to link globally? Call it directly anywhere you'd type `haya-pet`:
+`node <repo>/apps/cli/src/haya-pet.js`.
 
 ## Run an AI session
 
-Just wrap any command. **The first `ai-pet run` auto-starts the pet overlay** —
+Just wrap any command. **The first `haya-pet run` auto-starts the pet overlay** —
 there's nothing to launch first:
 
 ```bash
-ai-pet run --client codex        -- codex
-ai-pet run --client claude-code  -- claude
-ai-pet run --client generic      -- aider
+haya-pet run --client codex        -- codex
+haya-pet run --client claude-code  -- claude
+haya-pet run --client generic      -- aider
 # Windows / PowerShell example:
-ai-pet run --client generic      -- powershell -Command "Start-Sleep 10"
+haya-pet run --client generic      -- powershell -Command "Start-Sleep 10"
 ```
 
 A **session bubble** appears while the command runs (client · project · status),
@@ -134,7 +134,7 @@ shows success (a green check) or failure (a red cross), then fades.
 
 > If the overlay can't be started (e.g. Electron is missing), your command still
 > runs normally and keeps its exit code — you just won't see the pet. Disable
-> auto-start with `AI_PET_NO_AUTOSTART=1`, or launch it yourself with `ai-pet start`.
+> auto-start with `HAYA_PET_NO_AUTOSTART=1`, or launch it yourself with `haya-pet start`.
 
 ### Live activity status
 
@@ -144,8 +144,8 @@ Success/failure come from the real exit code — never from scraping the word
 "error" out of output. Your terminal stays fully interactive.
 
 ```bash
-ai-pet run -- claude          # live status (default)
-ai-pet run --no-observe -- claude   # lifecycle only (opt out of PTY observation)
+haya-pet run -- claude          # live status (default)
+haya-pet run --no-observe -- claude   # lifecycle only (opt out of PTY observation)
 ```
 
 > ⚠️ Running a CLI through the default PTY observation currently affects terminal
@@ -163,11 +163,11 @@ A pet is a folder with `pet.json` and a 1536×1872 sprite atlas (8×9 cells of
     spritesheet.webp
 ```
 
-Pets are discovered from `~/.codex/pets` and `~/.ai-pet/pets`. Then choose one:
+Pets are discovered from `~/.codex/pets` and `~/.haya-pet/pets`. Then choose one:
 
 ```bash
-ai-pet pets               # list installed pets (* = selected)
-ai-pet pets use my-pet    # select; remembered on every launch
+haya-pet pets               # list installed pets (* = selected)
+haya-pet pets use my-pet    # select; remembered on every launch
 ```
 
 Your choice is stored and reused every time. You can also pick from the tray menu
@@ -186,17 +186,17 @@ frames so everything still works.
 ## Stop / exit the pet
 
 ```bash
-ai-pet stop      # ask the running overlay to quit
+haya-pet stop      # ask the running overlay to quit
 ```
 
-…or **right-click the tray icon → Quit**. `ai-pet stop` is a no-op if nothing is
+…or **right-click the tray icon → Quit**. `haya-pet stop` is a no-op if nothing is
 running, so it's always safe to call.
 
 ## Manage the overlay
 
 ```bash
-ai-pet start     # start the overlay explicitly (usually unnecessary — run auto-starts it)
-ai-pet stop      # quit it
+haya-pet start     # start the overlay explicitly (usually unnecessary — run auto-starts it)
+haya-pet stop      # quit it
 ```
 
 ## Troubleshooting
@@ -205,11 +205,11 @@ Common fixes:
 
 | Symptom | Fix |
 |---|---|
-| `ai-pet: command not found` | Install globally, or `npm link` in a source checkout. |
-| Pet doesn't react to a session | Launch via `ai-pet run …`; check `AI_PET_NO_AUTOSTART` isn't set. |
+| `haya-pet: command not found` | Install globally, or `npm link` in a source checkout. |
+| Pet doesn't react to a session | Launch via `haya-pet run …`; check `HAYA_PET_NO_AUTOSTART` isn't set. |
 | Pet shows a blue placeholder box | No spritesheet — add a pet (above). |
 | Pet is off-screen | Tray menu → **Reset Position**. |
-| Can't exit | `ai-pet stop` or tray → **Quit**. |
+| Can't exit | `haya-pet stop` or tray → **Quit**. |
 
 Full list (incl. repairing a broken Electron install): [docs/troubleshooting.md](docs/troubleshooting.md).
 
@@ -230,7 +230,7 @@ platform matrix.)
 
 ## Privacy
 
-AI Pet is local-only by default. It does **not** upload prompts, files,
+Haya Pet is local-only by default. It does **not** upload prompts, files,
 screenshots, or session logs; it stores only short derived status summaries.
 Approvals always require explicit user action.
 

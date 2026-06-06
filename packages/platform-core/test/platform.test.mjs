@@ -22,12 +22,12 @@ test("returns Windows local app paths and named pipe endpoint", () => {
     homeDir: "C:\\Users\\A"
   });
 
-  assert.equal(paths.ipcEndpoint, "\\\\.\\pipe\\ai-petd");
-  assert.equal(paths.statePath, "C:\\Users\\A\\AppData\\Local\\ai-pet\\state.json");
-  assert.equal(paths.configPath, "C:\\Users\\A\\AppData\\Roaming\\ai-pet\\config.json");
+  assert.equal(paths.ipcEndpoint, "\\\\.\\pipe\\haya-petd");
+  assert.equal(paths.statePath, "C:\\Users\\A\\AppData\\Local\\haya-pet\\state.json");
+  assert.equal(paths.configPath, "C:\\Users\\A\\AppData\\Roaming\\haya-pet\\config.json");
   assert.deepEqual(paths.petSearchPaths, [
     "C:\\Users\\A\\.codex\\pets",
-    "C:\\Users\\A\\AppData\\Local\\ai-pet\\pets"
+    "C:\\Users\\A\\AppData\\Local\\haya-pet\\pets"
   ]);
 });
 
@@ -38,12 +38,12 @@ test("returns macOS local app paths and Unix socket endpoint", () => {
     homeDir: "/Users/a"
   });
 
-  assert.equal(paths.ipcEndpoint, "/Users/a/.ai-pet/ai-petd.sock");
-  assert.equal(paths.statePath, "/Users/a/.ai-pet/state.json");
-  assert.equal(paths.configPath, "/Users/a/.ai-pet/config.json");
+  assert.equal(paths.ipcEndpoint, "/Users/a/.haya-pet/haya-petd.sock");
+  assert.equal(paths.statePath, "/Users/a/.haya-pet/state.json");
+  assert.equal(paths.configPath, "/Users/a/.haya-pet/config.json");
   assert.deepEqual(paths.petSearchPaths, [
     "/Users/a/.codex/pets",
-    "/Users/a/.ai-pet/pets"
+    "/Users/a/.haya-pet/pets"
   ]);
 });
 
@@ -54,12 +54,12 @@ test("returns Linux local app paths and Unix socket endpoint", () => {
     homeDir: "/home/a"
   });
 
-  assert.equal(paths.ipcEndpoint, "/home/a/.ai-pet/ai-petd.sock");
-  assert.equal(paths.statePath, "/home/a/.ai-pet/state.json");
-  assert.equal(paths.configPath, "/home/a/.ai-pet/config.json");
+  assert.equal(paths.ipcEndpoint, "/home/a/.haya-pet/haya-petd.sock");
+  assert.equal(paths.statePath, "/home/a/.haya-pet/state.json");
+  assert.equal(paths.configPath, "/home/a/.haya-pet/config.json");
   assert.deepEqual(paths.petSearchPaths, [
     "/home/a/.codex/pets",
-    "/home/a/.ai-pet/pets"
+    "/home/a/.haya-pet/pets"
   ]);
 });
 

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "../../../test/harness.mjs";
 import { createDaemonRuntime } from "../../../packages/daemon-core/src/daemon-runtime.js";
 import { createIpcServer } from "../../../packages/daemon-core/src/ipc-server.js";
-import { parseAiPetArgs, runAiPet } from "../src/ai-pet.js";
+import { parseAiPetArgs, runAiPet } from "../src/haya-pet.js";
 
 test("parses generic run command arguments", () => {
   assert.deepEqual(
@@ -66,7 +66,7 @@ test("accepts a bare command without -- (shells may strip the separator)", () =>
 });
 
 test("rejects unsupported commands and missing arguments", () => {
-  assert.throws(() => parseAiPetArgs(["status"]), /Unsupported ai-pet command: status/);
+  assert.throws(() => parseAiPetArgs(["status"]), /Unsupported haya-pet command: status/);
   assert.throws(() => parseAiPetArgs(["run", "--client"]), /--client requires a value/);
   assert.throws(() => parseAiPetArgs(["run", "--"]), /run requires a child command/);
   assert.throws(() => parseAiPetArgs(["run", "--bogus"]), /Unknown run option/);
@@ -100,7 +100,7 @@ test("runs parsed command through injectable generic runner", async () => {
 test("runs command through daemon IPC when no send function is injected", async () => {
   const runtime = createDaemonRuntime();
   const server = await createIpcServer({
-    endpoint: "test-ai-petd",
+    endpoint: "test-haya-petd",
     platform: "test",
     onMessage: (message) => runtime.handleMessage(message)
   });
@@ -253,14 +253,14 @@ test("auto-starts the companion when one is not already running", async () => {
   assert.equal(calls.length, 1, "still runs the wrapped command");
 });
 
-test("AI_PET_NO_AUTOSTART disables auto-starting the companion", async () => {
+test("HAYA_PET_NO_AUTOSTART disables auto-starting the companion", async () => {
   let launched = 0;
   await runAiPet(
     ["run", "--client", "generic", "--", "node", "-e", "process.exit(0)"],
     {
       cwd: process.cwd(),
       heartbeatIntervalMs: 10,
-      env: { AI_PET_NO_AUTOSTART: "1" },
+      env: { HAYA_PET_NO_AUTOSTART: "1" },
       ipcEndpoint: "test-endpoint",
       createIpcClient: async () => {
         throw new Error("ECONNREFUSED");

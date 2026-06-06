@@ -65,7 +65,7 @@ export async function runGenericCommand(options) {
       });
     }
     process.stderr.write(
-      "ai-pet: live observation requested but node-pty is unavailable; running without live state.\n"
+      "haya-pet: live observation requested but node-pty is unavailable; running without live state.\n"
     );
   }
 

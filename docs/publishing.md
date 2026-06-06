@@ -1,6 +1,6 @@
 # Publishing
 
-How AI Pet is released to npm. Most users never need this — see the
+How Haya Pet is released to npm. Most users never need this — see the
 [README](../README.md) to install and use it.
 
 ## Release flow
@@ -24,7 +24,7 @@ isn't needed to test or publish) and publishes with
    at npmjs.com and add it under GitHub → repo Settings → Secrets and variables →
    Actions → `NPM_TOKEN`.
 2. **Package name** — confirm the name in `package.json` is available
-   (`npm view <name>`); rename or use a scope (`@you/ai-pet`) if taken. The
+   (`npm view <name>`); rename or use a scope (`@you/haya-pet`) if taken. The
    workflow already passes `--access public` for scoped packages.
 3. **`private` removed** — `npm publish` refuses private packages; the root
    `package.json` must not have `"private": true` (already removed).

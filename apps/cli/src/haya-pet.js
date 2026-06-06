@@ -20,7 +20,7 @@ const CLIENT_DISPLAY_NAMES = Object.freeze({
 
 export function parseAiPetArgs(argv) {
   if (!Array.isArray(argv) || argv.length === 0) {
-    throw new Error("ai-pet requires a command");
+    throw new Error("haya-pet requires a command");
   }
 
   const [command, ...rest] = argv;
@@ -41,7 +41,7 @@ export function parseAiPetArgs(argv) {
     return { command: "stop" };
   }
 
-  throw new Error(`Unsupported ai-pet command: ${command}`);
+  throw new Error(`Unsupported haya-pet command: ${command}`);
 }
 
 export async function runAiPet(argv, dependencies = {}) {
@@ -69,13 +69,13 @@ export async function runStopCommand(_parsed, dependencies = {}) {
   const { client } = await connectCompanion(dependencies, false);
 
   if (!client) {
-    print("ai-pet: companion is not running.");
+    print("haya-pet: companion is not running.");
     return { command: "stop", ok: true, wasRunning: false };
   }
 
   await client.send({ type: "shutdown" });
   await client.close();
-  print("ai-pet: companion stopped.");
+  print("haya-pet: companion stopped.");
   return { command: "stop", ok: true, wasRunning: true };
 }
 
@@ -86,16 +86,16 @@ export async function runStartCommand(_parsed, dependencies = {}) {
 
   if (client) {
     await client.close();
-    print(started ? "ai-pet: companion started." : "ai-pet: companion is already running.");
+    print(started ? "haya-pet: companion started." : "haya-pet: companion is already running.");
     return { command: "start", ok: true, started };
   }
 
   if (error) {
-    print(`ai-pet: could not start the companion (${error.message}).`);
+    print(`haya-pet: could not start the companion (${error.message}).`);
   } else if (timedOut) {
-    print("ai-pet: started the companion but it did not come up in time.");
+    print("haya-pet: started the companion but it did not come up in time.");
   } else {
-    print("ai-pet: companion is not running and auto-start is disabled.");
+    print("haya-pet: companion is not running and auto-start is disabled.");
   }
   return { command: "start", ok: false, started: false };
 }
@@ -145,7 +145,7 @@ export async function runPetsCommand(parsed, dependencies = {}) {
 
 function listPets({ pets, selectedId, print }) {
   if (pets.length === 0) {
-    print("No pets found. Add a pet folder (pet.json + spritesheet) to ~/.codex/pets or ~/.ai-pet/pets.");
+    print("No pets found. Add a pet folder (pet.json + spritesheet) to ~/.codex/pets or ~/.haya-pet/pets.");
     return { command: "pets", action: "list", pets: [], selectedId };
   }
 
@@ -251,7 +251,7 @@ function parseRunArgs(args) {
 
   if (childStart === -1) {
     // No command given: fall back to the client's declared default command
-    // (e.g. `ai-pet run --client codex` launches `codex`).
+    // (e.g. `haya-pet run --client codex` launches `codex`).
     const defaultCommand = getAdapterInfo(clientId)?.defaultCommand;
     if (!defaultCommand) {
       throw new Error(
@@ -301,7 +301,7 @@ async function createMessageSender(dependencies) {
   }
 
   if (started) {
-    process.stderr.write("ai-pet: started the companion overlay.\n");
+    process.stderr.write("haya-pet: started the companion overlay.\n");
   }
 
   return {
@@ -335,12 +335,12 @@ function shouldAutoStart(dependencies) {
     return dependencies.autoStart;
   }
   const env = dependencies.env ?? process.env;
-  const flag = env.AI_PET_NO_AUTOSTART;
+  const flag = env.HAYA_PET_NO_AUTOSTART;
   return flag !== "1" && flag !== "true";
 }
 
 // Spawns the Electron companion as a detached background process so it outlives
-// this `ai-pet run` invocation. `import("electron")` resolves to the binary path
+// this `haya-pet run` invocation. `import("electron")` resolves to the binary path
 // when required outside an Electron runtime; the companion app dir is the sibling
 // `apps/companion` package (whose package.json `main` is the overlay entry).
 async function defaultLaunchCompanion() {

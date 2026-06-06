@@ -26,13 +26,13 @@ function getWindowsPaths(env, homeDir) {
 
   return {
     platform: "windows",
-    ipcEndpoint: "\\\\.\\pipe\\ai-petd",
-    statePath: joinWindows(localAppData, "ai-pet", "state.json"),
-    configPath: joinWindows(appData, "ai-pet", "config.json"),
-    logDir: joinWindows(localAppData, "ai-pet", "logs"),
+    ipcEndpoint: "\\\\.\\pipe\\haya-petd",
+    statePath: joinWindows(localAppData, "haya-pet", "state.json"),
+    configPath: joinWindows(appData, "haya-pet", "config.json"),
+    logDir: joinWindows(localAppData, "haya-pet", "logs"),
     petSearchPaths: [
       joinWindows(homeDir, ".codex", "pets"),
-      joinWindows(localAppData, "ai-pet", "pets")
+      joinWindows(localAppData, "haya-pet", "pets")
     ]
   };
 }
@@ -40,13 +40,13 @@ function getWindowsPaths(env, homeDir) {
 function getUnixPaths(homeDir) {
   return {
     platform: "unix",
-    ipcEndpoint: joinUnix(homeDir, ".ai-pet", "ai-petd.sock"),
-    statePath: joinUnix(homeDir, ".ai-pet", "state.json"),
-    configPath: joinUnix(homeDir, ".ai-pet", "config.json"),
-    logDir: joinUnix(homeDir, ".ai-pet", "logs"),
+    ipcEndpoint: joinUnix(homeDir, ".haya-pet", "haya-petd.sock"),
+    statePath: joinUnix(homeDir, ".haya-pet", "state.json"),
+    configPath: joinUnix(homeDir, ".haya-pet", "config.json"),
+    logDir: joinUnix(homeDir, ".haya-pet", "logs"),
     petSearchPaths: [
       joinUnix(homeDir, ".codex", "pets"),
-      joinUnix(homeDir, ".ai-pet", "pets")
+      joinUnix(homeDir, ".haya-pet", "pets")
     ]
   };
 }
@@ -54,13 +54,13 @@ function getUnixPaths(homeDir) {
 function getUnsupportedPaths(homeDir) {
   return {
     platform: "unsupported",
-    ipcEndpoint: joinUnix(homeDir, ".ai-pet", "ai-petd.sock"),
-    statePath: joinUnix(homeDir, ".ai-pet", "state.json"),
-    configPath: joinUnix(homeDir, ".ai-pet", "config.json"),
-    logDir: joinUnix(homeDir, ".ai-pet", "logs"),
+    ipcEndpoint: joinUnix(homeDir, ".haya-pet", "haya-petd.sock"),
+    statePath: joinUnix(homeDir, ".haya-pet", "state.json"),
+    configPath: joinUnix(homeDir, ".haya-pet", "config.json"),
+    logDir: joinUnix(homeDir, ".haya-pet", "logs"),
     petSearchPaths: [
       joinUnix(homeDir, ".codex", "pets"),
-      joinUnix(homeDir, ".ai-pet", "pets")
+      joinUnix(homeDir, ".haya-pet", "pets")
     ]
   };
 }

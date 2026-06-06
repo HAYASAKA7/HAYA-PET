@@ -5,7 +5,7 @@ import { createIpcClient, createIpcServer } from "../src/ipc-server.js";
 test("server receives protocol messages from client", async () => {
   const received = [];
   const server = await createIpcServer({
-    endpoint: "test-ai-petd",
+    endpoint: "test-haya-petd",
     platform: "test",
     onMessage: (message) => received.push(message)
   });
@@ -22,7 +22,7 @@ test("server receives protocol messages from client", async () => {
 test("server reports invalid client protocol frames", async () => {
   const errors = [];
   const server = await createIpcServer({
-    endpoint: "test-ai-petd",
+    endpoint: "test-haya-petd",
     platform: "test",
     onMessage: () => {},
     onProtocolError: (error) => errors.push(error)
@@ -40,7 +40,7 @@ test("server reports invalid client protocol frames", async () => {
 test("client rejects invalid protocol messages before writing", async () => {
   const received = [];
   const server = await createIpcServer({
-    endpoint: "test-ai-petd",
+    endpoint: "test-haya-petd",
     platform: "test",
     onMessage: (message) => received.push(message)
   });

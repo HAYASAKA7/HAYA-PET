@@ -1,6 +1,6 @@
 # Architecture
 
-How AI Pet is put together. For installing and using it, see the
+How Haya Pet is put together. For installing and using it, see the
 [README](../README.md); this doc is for contributors and the curious.
 
 ## Pipeline
@@ -8,20 +8,20 @@ How AI Pet is put together. For installing and using it, see the
 ```text
 AI terminal clients
     → client adapters        (normalize behavior into a common event model)
-    → ai-petd daemon         (sessions, priority, pet state, IPC)
+    → haya-petd daemon         (sessions, priority, pet state, IPC)
     → shared pet runtime     (assets, animation, interaction)
     → desktop overlay        (global pet + session bubbles)
 ```
 
-You launch any AI CLI through the `ai-pet` wrapper. The wrapper registers a
+You launch any AI CLI through the `haya-pet` wrapper. The wrapper registers a
 session and reports lifecycle/activity events to the daemon over local IPC (a
-named pipe on Windows, a unix socket elsewhere). The first `ai-pet run`
-**auto-starts the daemon/overlay**, so users only ever type `ai-pet run …`.
+named pipe on Windows, a unix socket elsewhere). The first `haya-pet run`
+**auto-starts the daemon/overlay**, so users only ever type `haya-pet run …`.
 
 | Component | Responsibility |
 |---|---|
-| `ai-pet` (CLI) | Wrapper: launches clients, registers sessions, reports events, auto-starts the companion. |
-| `ai-petd` (companion) | Global daemon + overlay: owns sessions, pet state, windows, IPC. |
+| `haya-pet` (CLI) | Wrapper: launches clients, registers sessions, reports events, auto-starts the companion. |
+| `haya-petd` (companion) | Global daemon + overlay: owns sessions, pet state, windows, IPC. |
 | adapters | Translate client-specific behavior into the common state model. |
 | pet-core | Loads pet assets, computes frames, drives animation state. |
 | session-core | Tracks sessions, priority, summaries, bubble view models, linger. |
@@ -68,11 +68,11 @@ stays fully on-screen. The pet currently lives on a single display's work area.
 ## Distribution & runtime dependencies
 
 - `electron` is a **runtime dependency** (not just a dev tool), because
-  `ai-pet run` launches the overlay by spawning `electron <companion>`.
+  `haya-pet run` launches the overlay by spawning `electron <companion>`.
 - `node-pty` is **optional**: live observation (L2) uses it, and degrades to L1
   lifecycle tracking when it's absent.
-- Auto-start can be disabled with `AI_PET_NO_AUTOSTART=1`; `ai-pet start` /
-  `ai-pet stop` control the overlay explicitly.
+- Auto-start can be disabled with `HAYA_PET_NO_AUTOSTART=1`; `haya-pet start` /
+  `haya-pet stop` control the overlay explicitly.
 
 See [publishing.md](publishing.md) for the npm release process.
 
@@ -88,7 +88,7 @@ packages/
   daemon-core/     IPC server/transport, runtime bridge, singleton
   platform-core/   platform, paths, capabilities
 apps/
-  cli/             ai-pet entrypoint + parser (run / start / stop / pets)
+  cli/             haya-pet entrypoint + parser (run / start / stop / pets)
   companion/       Electron overlay app (main + renderer)
   pet-preview/     static preview scaffold
 native/
@@ -122,7 +122,7 @@ Optional per-OS helpers locate terminal windows so bubbles can attach near them.
 # Windows (.NET SDK 10, net10.0-windows):
 cd native\win-window-helper
 dotnet build -c Release
-# -> bin/Release/net10.0-windows/ai-pet-win-window-helper.exe
+# -> bin/Release/net10.0-windows/haya-pet-win-window-helper.exe
 ```
 
 macOS (Swift/AppKit) and Linux (X11/Wayland) helpers have documented contracts

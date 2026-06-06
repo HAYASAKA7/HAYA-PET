@@ -45,7 +45,7 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   app.on("second-instance", () => focusPet());
   app.whenReady().then(bootstrap).catch((error) => {
-    console.error("ai-pet companion failed to start:", error);
+    console.error("haya-pet companion failed to start:", error);
     app.quit();
   });
 }
@@ -61,7 +61,7 @@ async function bootstrap() {
   ipcServer = await createIpcServer({
     endpoint: paths.ipcEndpoint,
     onMessage: (message) => {
-      // `ai-pet stop` asks the daemon to exit; everything else is a session event.
+      // `haya-pet stop` asks the daemon to exit; everything else is a session event.
       if (message?.type === "shutdown") {
         app.quit();
         return;
@@ -115,7 +115,7 @@ function createPetWindow() {
 
   petWindow.setVisibleOnAllWorkspaces?.(true, { visibleOnFullScreen: true });
   // The whole work area is covered, so empty area MUST pass clicks through to the
-  // desktop; the renderer re-enables interaction (via ai-pet:set-mouse-ignore)
+  // desktop; the renderer re-enables interaction (via haya-pet:set-mouse-ignore)
   // only over the pet + bubbles.
   petWindow.setIgnoreMouseEvents(true, { forward: true });
   petWindow.loadFile(join(__dirname, "..", "renderer", "index.html"));
@@ -137,7 +137,7 @@ function clampPetLocal(local) {
 function createTray() {
   try {
     tray = new Tray(loadTrayIcon());
-    tray.setToolTip("AI Pet — right-click to Quit");
+    tray.setToolTip("Haya Pet — right-click to Quit");
   } catch (error) {
     // A failed tray must not take the whole app down; log and continue.
     console.error("tray unavailable:", error.message);
@@ -218,11 +218,11 @@ function handleTrayClick(item) {
 }
 
 function registerRendererHandlers() {
-  ipcMain.handle("ai-pet:list-sessions", () => buildSessionPayload());
+  ipcMain.handle("haya-pet:list-sessions", () => buildSessionPayload());
 
   // Fired on every cursor move while hovering the overlay, so use the
   // fire-and-forget channel (no round-trip) to toggle click-through.
-  ipcMain.on("ai-pet:set-mouse-ignore", (_event, ignore) => {
+  ipcMain.on("haya-pet:set-mouse-ignore", (_event, ignore) => {
     if (petWindow && !petWindow.isDestroyed()) {
       petWindow.setIgnoreMouseEvents(Boolean(ignore), { forward: true });
     }
@@ -230,7 +230,7 @@ function registerRendererHandlers() {
 
   // The pet moves within the overlay (CSS), so the renderer reports its new
   // work-area-relative position instead of moving the window.
-  ipcMain.handle("ai-pet:save-pet-position", async (_event, local) => {
+  ipcMain.handle("haya-pet:save-pet-position", async (_event, local) => {
     petLocal = clampPetLocal(local ?? petLocal);
     persistPetPosition();
     return petLocal;
@@ -252,13 +252,13 @@ function buildSessionPayload() {
 function pushSessions() {
   refreshTrayMenu();
   if (petWindow && !petWindow.isDestroyed()) {
-    petWindow.webContents.send("ai-pet:sessions", buildSessionPayload());
+    petWindow.webContents.send("haya-pet:sessions", buildSessionPayload());
   }
 }
 
 function sendPetConfig() {
   const selected = pets.find((pet) => pet.manifest.id === positionState.globalPet.selectedPetId) ?? pets[0];
-  petWindow.webContents.send("ai-pet:config", {
+  petWindow.webContents.send("haya-pet:config", {
     pet: selected
       ? { manifest: selected.manifest, spritesheetUrl: selected.spritesheetUrl }
       : undefined,
@@ -268,7 +268,7 @@ function sendPetConfig() {
 }
 
 function sendPetPosition() {
-  petWindow?.webContents.send("ai-pet:pet-position", petLocal);
+  petWindow?.webContents.send("haya-pet:pet-position", petLocal);
 }
 
 let persistTimer;
@@ -320,7 +320,7 @@ function resetPosition() {
 function setDisplayMode(displayMode) {
   positionState = { ...positionState, settings: { ...positionState.settings, displayMode } };
   stateFile.save(positionState).catch(() => {});
-  petWindow?.webContents.send("ai-pet:display-mode", displayMode);
+  petWindow?.webContents.send("haya-pet:display-mode", displayMode);
   refreshTrayMenu();
 }
 

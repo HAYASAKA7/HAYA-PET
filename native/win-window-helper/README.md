@@ -39,13 +39,13 @@ enumerates top-level windows (`EnumWindows` + `GetWindowThreadProcessId` +
 ```bash
 cd native/win-window-helper
 dotnet build -c Release
-# -> bin/Release/net10.0-windows/ai-pet-win-window-helper.exe
+# -> bin/Release/net10.0-windows/haya-pet-win-window-helper.exe
 ```
 
 ### Try it
 
 ```bash
-echo {"id":"a","op":"capabilities"} | bin/Release/net10.0-windows/ai-pet-win-window-helper.exe
+echo {"id":"a","op":"capabilities"} | bin/Release/net10.0-windows/haya-pet-win-window-helper.exe
 ```
 
 The `apps/companion/src/main/terminal-helper-client.js` client spawns this exe

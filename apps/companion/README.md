@@ -1,11 +1,11 @@
-# AI Pet Companion (Electron overlay)
+# Haya Pet Companion (Electron overlay)
 
 The desktop overlay app for the AI CLI pet runtime. It hosts the daemon IPC
 server, renders the global pet, and shows the session bubbles. (A reply/approval
 "task talk window" is scaffolded but parked — see below.)
 
-> Most users never launch this directly: `ai-pet run` auto-starts it. This doc
-> covers its internals. For installing/using AI Pet, see the
+> Most users never launch this directly: `haya-pet run` auto-starts it. This doc
+> covers its internals. For installing/using Haya Pet, see the
 > [root README](../../README.md) and [docs/architecture.md](../../docs/architecture.md).
 
 ## Architecture
@@ -28,7 +28,7 @@ unit-tested pure packages and is imported directly:
 
 ```
 main process (index.js)
-  ├─ IPC server (daemon-core)  ← ai-pet wrappers send register/state/heartbeat
+  ├─ IPC server (daemon-core)  ← haya-pet wrappers send register/state/heartbeat
   ├─ daemon runtime + session registry
   ├─ overlay BrowserWindow  → renderer
   └─ tray + position persistence
@@ -41,7 +41,7 @@ renderer
 
 ## Run
 
-Normally you don't — `ai-pet run` (or `ai-pet start`) launches the overlay by
+Normally you don't — `haya-pet run` (or `haya-pet start`) launches the overlay by
 spawning Electron, which is a root runtime dependency. For development you can
 still start it directly:
 
@@ -53,21 +53,21 @@ Requires Node ≥ 18. Then, from any terminal, launch an AI CLI through the wrap
 so the pet reflects it:
 
 ```bash
-ai-pet run --client generic -- sleep 10
-ai-pet run --client codex -- codex
+haya-pet run --client generic -- sleep 10
+haya-pet run --client codex -- codex
 ```
 
 ## Pets
 
-Pets are discovered from `~/.codex/pets` and `~/.ai-pet/pets`. Without a
+Pets are discovered from `~/.codex/pets` and `~/.haya-pet/pets`. Without a
 spritesheet the renderer draws labelled placeholder frames so interactions and
 state mapping remain testable. See `assets/fallback-pet/README.md`.
 
 Select a pet from the tray menu → **Installed Pets**, or from the CLI:
 
 ```bash
-ai-pet pets              # list (the * marks the selected pet)
-ai-pet pets use my-pet   # persist the selection; used on next companion start
+haya-pet pets              # list (the * marks the selected pet)
+haya-pet pets use my-pet   # persist the selection; used on next companion start
 ```
 
 The selection is stored in the shared state file (`globalPet.selectedPetId`),

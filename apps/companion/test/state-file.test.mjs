@@ -23,7 +23,7 @@ function fakeFs(initial) {
 
 test("returns default state when the file is missing", async () => {
   const fs = fakeFs();
-  const store = createStateFile({ statePath: "/tmp/ai-pet/state.json", ...fs });
+  const store = createStateFile({ statePath: "/tmp/haya-pet/state.json", ...fs });
   const state = await store.load();
   assert.equal(state.globalPet.open, true);
   assert.equal(state.settings.displayMode, "hybrid");
@@ -31,7 +31,7 @@ test("returns default state when the file is missing", async () => {
 
 test("persists and reloads global pet position", async () => {
   const fs = fakeFs();
-  const store = createStateFile({ statePath: "/tmp/ai-pet/state.json", ...fs });
+  const store = createStateFile({ statePath: "/tmp/haya-pet/state.json", ...fs });
 
   await store.save({
     globalPet: { open: true, x: 100, y: 200, manual: true },
@@ -45,8 +45,8 @@ test("persists and reloads global pet position", async () => {
 });
 
 test("recovers from corrupt state content", async () => {
-  const fs = fakeFs({ "/tmp/ai-pet/state.json": "{ not json" });
-  const store = createStateFile({ statePath: "/tmp/ai-pet/state.json", ...fs });
+  const fs = fakeFs({ "/tmp/haya-pet/state.json": "{ not json" });
+  const store = createStateFile({ statePath: "/tmp/haya-pet/state.json", ...fs });
   const state = await store.load();
   assert.equal(state.globalPet.open, true);
 });

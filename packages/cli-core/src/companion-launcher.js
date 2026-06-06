@@ -1,5 +1,5 @@
 // Orchestrates "connect to the companion, auto-starting it if it isn't running"
-// so `ai-pet run` works without anyone manually launching the overlay first.
+// so `haya-pet run` works without anyone manually launching the overlay first.
 //
 // Pure and dependency-injected: the caller supplies how to `connect` (open an
 // IPC client, throwing if nothing is listening) and how to `launch` (spawn the

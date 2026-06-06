@@ -1,10 +1,10 @@
 {
-  "name": "haya-pet",
+  "name": "@hayasaka7/haya-pet",
   "version": "0.1.0",
   "type": "module",
   "description": "Generic AI CLI pet runtime foundation.",
   "bin": {
-    "ai-pet": "apps/cli/src/ai-pet.js"
+    "haya-pet": "apps/cli/src/haya-pet.js"
   },
   "scripts": {
     "test": "node test/run-tests.mjs"

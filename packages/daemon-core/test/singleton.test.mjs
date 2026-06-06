@@ -7,7 +7,7 @@ import {
 } from "../src/singleton.js";
 
 test("round-trips a lock record", () => {
-  const lock = { pid: 1234, startedAt: 100, endpoint: "\\\\.\\pipe\\ai-petd" };
+  const lock = { pid: 1234, startedAt: 100, endpoint: "\\\\.\\pipe\\haya-petd" };
   const parsed = parseLock(serializeLock(lock));
   assert.deepEqual(parsed, lock);
 });

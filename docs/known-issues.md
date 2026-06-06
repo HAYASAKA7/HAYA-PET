@@ -3,9 +3,9 @@
 Issues found in live use that are **recorded for later** — not yet fixed. The
 decision on *how* to fix is pending.
 
-## 1. Terminal scrolling breaks when running a CLI through `ai-pet run` (observe/PTY mode)
+## 1. Terminal scrolling breaks when running a CLI through `haya-pet run` (observe/PTY mode)
 
-- **Symptom:** While a CLI is running under `ai-pet run` (default `--observe`), the
+- **Symptom:** While a CLI is running under `haya-pet run` (default `--observe`), the
   terminal window can no longer scroll normally.
 - **Trigger:** Only in observe (PTY) mode. The plain `--no-observe` path
   (`stdio: "inherit"`) does not have this problem.
@@ -25,7 +25,7 @@ decision on *how* to fix is pending.
 
 ## 2. Backspace deletes a whole word instead of one character (observe/PTY mode)
 
-- **Symptom:** While a CLI is running under `ai-pet run`, pressing Backspace
+- **Symptom:** While a CLI is running under `haya-pet run`, pressing Backspace
   deletes an entire word rather than a single character.
 - **Trigger:** Only in observe (PTY) mode. Native (`--no-observe`) is unaffected.
 - **Diagnosis:** stdin is put in raw mode and forwarded byte-for-byte into the PTY

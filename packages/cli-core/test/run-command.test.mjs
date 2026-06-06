@@ -62,7 +62,7 @@ test("launches a Windows .cmd shim via the shell and reports a valid pid", async
     return; // shell resolution of .cmd shims is Windows-specific
   }
 
-  const dir = mkdtempSync(join(tmpdir(), "ai-pet-cmd-"));
+  const dir = mkdtempSync(join(tmpdir(), "haya-pet-cmd-"));
   const cmdPath = join(dir, "fake-cli.cmd");
   writeFileSync(cmdPath, "@echo off\r\nexit /b 5\r\n");
 

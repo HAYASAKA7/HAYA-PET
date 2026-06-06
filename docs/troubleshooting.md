@@ -5,14 +5,14 @@ deferred problems with known root causes.
 
 | Symptom | Fix |
 |---|---|
-| `ai-pet: command not found` | Install globally (`npm i -g …`), or in a source checkout run `npm link` in the repo root, or call the file directly: `node <repo>/apps/cli/src/ai-pet.js`. |
+| `haya-pet: command not found` | Install globally (`npm i -g …`), or in a source checkout run `npm link` in the repo root, or call the file directly: `node <repo>/apps/cli/src/haya-pet.js`. |
 | Running a CLI starts the pet but not the command | Fixed — update to the latest version. (Was caused by the auto-start poll exiting early.) |
-| Pet doesn't react to a session | Launch the CLI via `ai-pet run …`. If the overlay didn't auto-start, run `ai-pet start`, or check `AI_PET_NO_AUTOSTART` isn't set. |
+| Pet doesn't react to a session | Launch the CLI via `haya-pet run …`. If the overlay didn't auto-start, run `haya-pet start`, or check `HAYA_PET_NO_AUTOSTART` isn't set. |
 | Pet shows a blue placeholder box | No spritesheet found — add a pet (see the README); behaviour is otherwise correct. |
 | Pet is off-screen / can't find it | Tray icon → **Reset Position**. |
-| Can't exit the pet | `ai-pet stop`, or right-click the tray icon → **Quit**. |
-| `ai-pet pets` shows "No pets found" | Add a pet folder with **both** `pet.json` and a spritesheet to a search path. |
-| Terminal scroll / backspace odd while a CLI runs under `ai-pet run` | Known PTY-observation tradeoff — see [known-issues.md](known-issues.md). Workaround: `ai-pet run --no-observe …`. |
+| Can't exit the pet | `haya-pet stop`, or right-click the tray icon → **Quit**. |
+| `haya-pet pets` shows "No pets found" | Add a pet folder with **both** `pet.json` and a spritesheet to a search path. |
+| Terminal scroll / backspace odd while a CLI runs under `haya-pet run` | Known PTY-observation tradeoff — see [known-issues.md](known-issues.md). Workaround: `haya-pet run --no-observe …`. |
 | `ENOENT … electron\path.txt` | Electron's install extraction was interrupted — see below. |
 
 ## Fixing a broken Electron install
