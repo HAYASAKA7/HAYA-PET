@@ -3,6 +3,9 @@ import { fileURLToPath } from "node:url";
 import { runGenericCommand as defaultRunGenericCommand } from "../../../packages/cli-core/src/run-command.js";
 import { createIpcClient as defaultCreateIpcClient } from "../../../packages/daemon-core/src/ipc-server.js";
 import { getDefaultPaths } from "../../../packages/platform-core/src/paths.js";
+import { discoverPets as defaultDiscoverPets } from "../../../packages/pet-core/src/discovery.js";
+import { createStateFile as defaultCreateStateFile } from "../../../packages/app-state/src/state-file.js";
+import { getSelectedPetId, setSelectedPet } from "../../../packages/app-state/src/state.js";
 
 const CLIENT_DISPLAY_NAMES = Object.freeze({
   generic: "Generic",
@@ -18,15 +21,28 @@ export function parseAiPetArgs(argv) {
 
   const [command, ...rest] = argv;
 
-  if (command !== "run") {
-    throw new Error(`Unsupported ai-pet command: ${command}`);
+  if (command === "run") {
+    return parseRunArgs(rest);
   }
 
-  return parseRunArgs(rest);
+  if (command === "pets") {
+    return parsePetsArgs(rest);
+  }
+
+  throw new Error(`Unsupported ai-pet command: ${command}`);
 }
 
 export async function runAiPet(argv, dependencies = {}) {
   const parsed = parseAiPetArgs(argv);
+
+  if (parsed.command === "pets") {
+    return runPetsCommand(parsed, dependencies);
+  }
+
+  return runRunCommand(parsed, dependencies);
+}
+
+async function runRunCommand(parsed, dependencies) {
   const runGenericCommand = dependencies.runGenericCommand ?? defaultRunGenericCommand;
   const messageSender = await createMessageSender(dependencies);
 
@@ -47,10 +63,85 @@ export async function runAiPet(argv, dependencies = {}) {
   }
 }
 
+export async function runPetsCommand(parsed, dependencies = {}) {
+  const paths = getDefaultPaths({
+    platform: dependencies.platform,
+    env: dependencies.env,
+    homeDir: dependencies.homeDir
+  });
+  const discoverPets = dependencies.discoverPets ?? defaultDiscoverPets;
+  const createStateFile = dependencies.createStateFile ?? defaultCreateStateFile;
+  const print = dependencies.print ?? defaultPrint;
+
+  const stateFile = createStateFile({ statePath: paths.statePath });
+  const pets = await discoverPets(paths.petSearchPaths);
+  const state = await stateFile.load();
+
+  if (parsed.action === "use") {
+    return usePet({ parsed, pets, state, stateFile, setSelectedPet, print });
+  }
+
+  return listPets({ pets, selectedId: getSelectedPetId(state), print });
+}
+
+function listPets({ pets, selectedId, print }) {
+  if (pets.length === 0) {
+    print("No pets found. Add a pet folder (pet.json + spritesheet) to ~/.codex/pets or ~/.ai-pet/pets.");
+    return { command: "pets", action: "list", pets: [], selectedId };
+  }
+
+  print("Installed pets (* = selected):");
+  for (const pet of pets) {
+    const marker = pet.manifest.id === selectedId ? "*" : " ";
+    print(`${marker} ${pet.manifest.id}\t${pet.manifest.name}`);
+  }
+
+  return { command: "pets", action: "list", pets: pets.map((pet) => pet.manifest.id), selectedId };
+}
+
+async function usePet({ parsed, pets, state, stateFile, setSelectedPet: applySelection, print }) {
+  const target = pets.find((pet) => pet.manifest.id === parsed.petId);
+
+  await stateFile.save(applySelection(state, parsed.petId));
+
+  if (!target) {
+    print(`Warning: "${parsed.petId}" is not currently installed; it will be used when available.`);
+  }
+  print(`Selected pet: ${parsed.petId}`);
+
+  return { command: "pets", action: "use", ok: true, petId: parsed.petId, installed: Boolean(target) };
+}
+
+function defaultPrint(line) {
+  process.stdout.write(`${line}\n`);
+}
+
 export async function main(argv = process.argv.slice(2), dependencies = {}) {
   const result = await runAiPet(argv, dependencies);
   process.exitCode = result.exitCode ?? 0;
   return result;
+}
+
+function parsePetsArgs(args) {
+  if (args.length === 0) {
+    return { command: "pets", action: "list" };
+  }
+
+  const [action, ...rest] = args;
+
+  if (action === "list") {
+    return { command: "pets", action: "list" };
+  }
+
+  if (action === "use") {
+    const petId = rest[0];
+    if (!petId) {
+      throw new Error("pets use requires a pet id");
+    }
+    return { command: "pets", action: "use", petId };
+  }
+
+  throw new Error(`Unknown pets action: ${action}`);
 }
 
 function parseRunArgs(args) {

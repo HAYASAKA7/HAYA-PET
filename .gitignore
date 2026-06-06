@@ -9,6 +9,10 @@ build/
 coverage/
 .nyc_output/
 
+# .NET native helper build artifacts
+bin/
+obj/
+
 # Logs
 *.log
 npm-debug.log*

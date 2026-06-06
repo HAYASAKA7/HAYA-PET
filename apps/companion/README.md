@@ -62,6 +62,16 @@ Pets are discovered from `~/.codex/pets` and `~/.ai-pet/pets`. Without a
 spritesheet the renderer draws labelled placeholder frames so interactions and
 state mapping remain testable. See `assets/fallback-pet/README.md`.
 
+Select a pet from the tray menu → **Installed Pets**, or from the CLI:
+
+```bash
+ai-pet pets              # list (the * marks the selected pet)
+ai-pet pets use my-pet   # persist the selection; used on next companion start
+```
+
+The selection is stored in the shared state file (`globalPet.selectedPetId`),
+so the companion starts with your last selected pet.
+
 ## Safety
 
 - The overlay never steals focus (`focusable: false` on supported platforms).

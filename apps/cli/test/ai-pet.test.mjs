@@ -83,6 +83,75 @@ test("runs command through daemon IPC when no send function is injected", async 
   }
 });
 
+test("parses pets list and pets use commands", () => {
+  assert.deepEqual(parseAiPetArgs(["pets"]), { command: "pets", action: "list" });
+  assert.deepEqual(parseAiPetArgs(["pets", "list"]), { command: "pets", action: "list" });
+  assert.deepEqual(parseAiPetArgs(["pets", "use", "cat"]), { command: "pets", action: "use", petId: "cat" });
+  assert.throws(() => parseAiPetArgs(["pets", "use"]), /pets use requires a pet id/);
+  assert.throws(() => parseAiPetArgs(["pets", "bogus"]), /Unknown pets action: bogus/);
+});
+
+test("pets list marks the currently selected pet", async () => {
+  const lines = [];
+  const result = await runAiPet(["pets", "list"], {
+    homeDir: "C:\\Users\\A",
+    discoverPets: async () => [
+      { manifest: { id: "cat", name: "Cat" } },
+      { manifest: { id: "dog", name: "Dog" } }
+    ],
+    createStateFile: () => fakeStateFile({ globalPet: { selectedPetId: "dog" } }),
+    print: (line) => lines.push(line)
+  });
+
+  assert.deepEqual(result.pets, ["cat", "dog"]);
+  assert.equal(result.selectedId, "dog");
+  assert.ok(lines.some((line) => line.startsWith("* dog")));
+  assert.ok(lines.some((line) => line.startsWith("  cat")));
+});
+
+test("pets use stores the selection in the state file", async () => {
+  const store = fakeStateFile({ globalPet: {} });
+  const result = await runAiPet(["pets", "use", "cat"], {
+    homeDir: "C:\\Users\\A",
+    discoverPets: async () => [{ manifest: { id: "cat", name: "Cat" } }],
+    createStateFile: () => store,
+    print: () => {}
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.installed, true);
+  assert.equal(store.current().globalPet.selectedPetId, "cat");
+});
+
+test("pets use still stores an id that is not currently installed", async () => {
+  const store = fakeStateFile({ globalPet: {} });
+  const lines = [];
+  const result = await runAiPet(["pets", "use", "ghost"], {
+    homeDir: "C:\\Users\\A",
+    discoverPets: async () => [],
+    createStateFile: () => store,
+    print: (line) => lines.push(line)
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.installed, false);
+  assert.equal(store.current().globalPet.selectedPetId, "ghost");
+  assert.ok(lines.some((line) => line.includes("not currently installed")));
+});
+
+function fakeStateFile(initial) {
+  let state = initial;
+  return {
+    statePath: "state.json",
+    load: async () => state,
+    save: async (next) => {
+      state = next;
+      return next;
+    },
+    current: () => state
+  };
+}
+
 test("still runs the wrapped command when no daemon is available", async () => {
   const calls = [];
   const result = await runAiPet(

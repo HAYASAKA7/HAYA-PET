@@ -12,7 +12,7 @@ import { buildApprovalDecision } from "../../../../packages/task-core/src/approv
 import { buildTaskInputRequest } from "../../../../packages/task-core/src/replies.js";
 import { buildPetWindowOptions } from "./window-options.js";
 import { resolveSavedPosition, clampWindowBounds } from "./display-manager.js";
-import { updateGlobalPetPosition } from "./position-store.js";
+import { setSelectedPet, updateGlobalPetPosition } from "./position-store.js";
 import { buildTrayMenu } from "./tray-menu.js";
 import { createStateFile } from "./state-file.js";
 import { discoverPets } from "./pet-loader.js";
@@ -283,7 +283,7 @@ function toggleAttachBubbles() {
 }
 
 function selectPet(petId) {
-  positionState = { ...positionState, globalPet: { ...positionState.globalPet, selectedPetId: petId } };
+  positionState = setSelectedPet(positionState, petId);
   stateFile.save(positionState).catch(() => {});
   sendPetConfig();
   refreshTrayMenu();
