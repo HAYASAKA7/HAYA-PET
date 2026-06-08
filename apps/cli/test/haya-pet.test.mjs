@@ -335,8 +335,8 @@ test("parses the state command", () => {
   });
 });
 
-const hooksStateFile = (claudeHooks) => () => ({
-  load: async () => ({ settings: { claudeHooks } }),
+const hooksStateFile = (hooksEnabled) => () => ({
+  load: async () => ({ settings: { hooksEnabled } }),
   save: async (state) => state
 });
 
@@ -409,7 +409,7 @@ test("hooks command parses and persists the toggle", async () => {
   let saved;
   const lines = [];
   const store = {
-    load: async () => ({ settings: { claudeHooks: false } }),
+    load: async () => ({ settings: { hooksEnabled: false } }),
     save: async (state) => { saved = state; return state; }
   };
   const result = await runAiPet(["hooks", "on"], {
@@ -419,8 +419,71 @@ test("hooks command parses and persists the toggle", async () => {
   });
 
   assert.equal(result.enabled, true);
-  assert.equal(saved.settings.claudeHooks, true);
+  assert.equal(saved.settings.hooksEnabled, true);
   assert.ok(lines.some((l) => l.includes("on")));
+});
+
+test("persisted `hooks on` injects a Codex profile via -p at the front of args", async () => {
+  const calls = [];
+  let injected = 0;
+  await runAiPet(["run", "--client", "codex", "--", "codex"], {
+    cwd: process.cwd(),
+    env: { USERPROFILE: "C:\\Users\\A" }, // no HAYA_PET_HOOKS
+    heartbeatIntervalMs: 10,
+    send: async () => {},
+    createStateFile: hooksStateFile(true),
+    injectCodexHooks: () => { injected += 1; return { profileName: "haya-pet", cleanup: () => {} }; },
+    runGenericCommand: async (options) => {
+      calls.push(options);
+      return { sessionId: options.sessionId, pid: 1, exitCode: 0 };
+    }
+  });
+
+  assert.equal(injected, 1, "config preference enables Codex hooks");
+  assert.deepEqual(calls[0].args, ["-p", "haya-pet"], "profile flag goes at the front");
+});
+
+test("codex hooks are skipped (with a notice) when the user passes their own -p", async () => {
+  const calls = [];
+  let injected = 0;
+  const lines = [];
+  await runAiPet(["run", "--client", "codex", "--", "codex", "-p", "mine"], {
+    cwd: process.cwd(),
+    env: { USERPROFILE: "C:\\Users\\A" },
+    heartbeatIntervalMs: 10,
+    send: async () => {},
+    createStateFile: hooksStateFile(true),
+    print: (line) => lines.push(line),
+    injectCodexHooks: () => { injected += 1; return { profileName: "haya-pet", cleanup: () => {} }; },
+    runGenericCommand: async (options) => {
+      calls.push(options);
+      return { sessionId: options.sessionId, pid: 1, exitCode: 0 };
+    }
+  });
+
+  assert.equal(injected, 0, "user's profile is respected — no injection");
+  assert.deepEqual(calls[0].args, ["-p", "mine"], "user args untouched");
+  assert.ok(lines.some((l) => /skipped/i.test(l)), "user is told why");
+});
+
+test("codex does NOT inject hooks by default (safe out-of-box)", async () => {
+  const calls = [];
+  let injected = 0;
+  await runAiPet(["run", "--client", "codex", "--", "codex"], {
+    cwd: process.cwd(),
+    env: { USERPROFILE: "C:\\Users\\A" },
+    heartbeatIntervalMs: 10,
+    send: async () => {},
+    createStateFile: hooksStateFile(false),
+    injectCodexHooks: () => { injected += 1; return { profileName: "haya-pet", cleanup: () => {} }; },
+    runGenericCommand: async (options) => {
+      calls.push(options);
+      return { sessionId: "s", pid: 1, exitCode: 0 };
+    }
+  });
+
+  assert.equal(injected, 0, "no hook injection unless opted in");
+  assert.deepEqual(calls[0].args, []);
 });
 
 test("HAYA_PET_HOOKS=1 opts claude-code into --settings + HAYA_PET_SESSION_ID", async () => {
@@ -471,14 +534,15 @@ test("a transcript denial clears the stuck approval to idle", async () => {
   assert.equal(idle.updatedAt, 42);
 });
 
-test("non-claude clients are never injected even with HAYA_PET_HOOKS=1", async () => {
+test("non-hook-capable clients are never injected even with HAYA_PET_HOOKS=1", async () => {
   const calls = [];
-  await runAiPet(["run", "--client", "codex", "--", "codex"], {
+  await runAiPet(["run", "--client", "generic", "--", "aider"], {
     cwd: process.cwd(),
     env: { HAYA_PET_HOOKS: "1", USERPROFILE: "C:\\Users\\A" },
     heartbeatIntervalMs: 10,
     send: async () => {},
-    injectClaudeHooks: () => { throw new Error("should not inject for codex"); },
+    injectClaudeHooks: () => { throw new Error("should not inject for generic"); },
+    injectCodexHooks: () => { throw new Error("should not inject for generic"); },
     runGenericCommand: async (options) => {
       calls.push(options);
       return { sessionId: "s", pid: 1, exitCode: 0 };

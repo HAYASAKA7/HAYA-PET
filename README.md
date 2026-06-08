@@ -52,8 +52,8 @@ Haya Pet watches all of them and presents one ambient interface:
   (`thinking`, `running_tool`, `waiting_approval`, `reviewing`, `failed`, …).
 - 🧩 **Client adapters** with tiered support (process wrapper → PTY observer →
   client hooks) so the daemon never bakes in client-specific logic. Default is
-  lifecycle status; richer status is opt-in (Claude Code hooks via `HAYA_PET_HOOKS=1`,
-  or PTY `--observe` for any client).
+  lifecycle status; richer status is opt-in (Claude Code / Codex hooks via
+  `haya-pet hooks on`, or PTY `--observe` for any client).
 - 🚀 **Zero-setup launch** — `haya-pet run …` auto-starts the overlay; no separate
   daemon to manage.
 - 🖼️ **Codex-compatible pet assets** (1536×1872 sprite atlas, 9 actions).
@@ -94,8 +94,8 @@ Haya Pet watches all of them and presents one ambient interface:
 | **Node ≥ 18** | Runtime + companion (Electron) |
 | **npm** | Install + scripts |
 
-> Default status is lifecycle-only and needs no extra modules. Opt-in Claude Code
-> hooks (`HAYA_PET_HOOKS=1`) also need none. The opt-in `--observe` PTY mode uses
+> Default status is lifecycle-only and needs no extra modules. Opt-in Claude Code /
+> Codex hooks (`haya-pet hooks on`) also need none. The opt-in `--observe` PTY mode uses
 > `node-pty` (installed automatically when it can build; without it, `--observe`
 > degrades to lifecycle-only tracking).
 
@@ -157,11 +157,12 @@ Two **opt-in** ways to get richer *in-session* status (thinking / running tools 
 editing files / waiting for approval):
 
 ```bash
-# Claude Code — live status via per-session hooks, NO terminal-fidelity tradeoff.
-# Enable once (persisted); the first run shows a one-time Claude "review hooks"
-# prompt you approve once.
+# Claude Code AND Codex — live status via per-session hooks, NO terminal-fidelity
+# tradeoff. Enable once (persisted, global); the first run for each client shows a
+# one-time "review hooks" prompt you approve once.
 haya-pet hooks on
 haya-pet run --client claude-code -- claude
+haya-pet run --client codex       -- codex
 #   (per-run override without persisting: HAYA_PET_HOOKS=1 …, or $env:HAYA_PET_HOOKS=1 in PowerShell)
 #   (turn back off: haya-pet hooks off   ·   check: haya-pet hooks status)
 
@@ -169,10 +170,18 @@ haya-pet run --client claude-code -- claude
 haya-pet run --observe --client codex -- codex
 ```
 
+> **Codex hooks are partial today.** Codex shows `thinking` (working) and `idle`
+> (done); `running_tool` / `editing_files` / *waiting for approval* are wired but
+> don't arrive yet because of an upstream gap where Codex's `PreToolUse` /
+> `PermissionRequest` hooks don't fire ([openai/codex#16732](https://github.com/openai/codex/issues/16732)).
+> They'll start working automatically once Codex fixes it. Also: if you pass your
+> own `-p/--profile` to codex, haya-pet skips hook injection (Codex allows one
+> profile) and tells you. Claude Code has full coverage.
+
 > **Why opt-in?**
-> - **Hooks (Claude Code):** injecting hooks makes Claude show a one-time
->   *review hooks* trust prompt. We don't disrupt your session by default; turn it
->   on once with `haya-pet hooks on` when you're happy to approve the hooks.
+> - **Hooks (Claude Code / Codex):** injecting hooks makes the client show a
+>   one-time *review hooks* trust prompt. We don't disrupt your session by default;
+>   turn it on once with `haya-pet hooks on` when you're happy to approve the hooks.
 > - **`--observe` (any client):** PTY observation infers status from output, but on
 >   Windows it routes input through ConPTY, which can break **Shift+Tab**, mouse
 >   scroll, and word-edit. Use it only for non-interactive runs. See
@@ -246,8 +255,8 @@ Full list (incl. repairing a broken Electron install): [docs/troubleshooting.md]
 | Client | Status | Support level |
 |---|---|---|
 | Generic CLI | ✅ | L1 process wrapper (+ L2 PTY via `--observe`) |
-| Codex | ✅ | L1 wrapper (+ L2 PTY via `--observe`) |
-| Claude Code | ✅ | L1 wrapper + **L4 live-status hooks** (opt-in `HAYA_PET_HOOKS=1`) |
+| Codex | ✅ | L1 wrapper + **L4 live-status hooks** (opt-in `haya-pet hooks on`; partial — see note) |
+| Claude Code | ✅ | L1 wrapper + **L4 live-status hooks** (opt-in `haya-pet hooks on`) |
 | Antigravity | ✅ | L1 wrapper (+ L2 PTY via `--observe`) |
 | Gemini CLI / Aider / others | 🔜 | via the generic adapter |
 

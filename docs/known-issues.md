@@ -94,11 +94,50 @@ observation (`--observe`) or L1 lifecycle as the fallback. Current state:
   approving once (a volatile per-session argument would re-trigger it every
   launch — see the resolved note below). `--observe` is a separate PTY opt-in for
   non-interactive runs (terminal-fidelity tradeoff).
-- **Codex** — **not yet implemented** (no hook injection). Uses `--observe` PTY
-  observation or L1 lifecycle. A Codex hook adapter (temp `<cwd>/.codex/hooks.json`
-  + `--dangerously-bypass-hook-trust`) is a planned follow-up; note the open
-  upstream bug where hooks may not fire in interactive sessions
-  ([#17532](https://github.com/openai/codex/issues/17532)).
+- **Codex** — **implemented (partial).** Opt-in via the global `haya-pet hooks on`;
+  the wrapper injects `packages/adapters/src/codex-hooks.js` as a stable
+  `$CODEX_HOME/haya-pet.config.toml` profile and launches `codex -p haya-pet`
+  (`packages/cli-core/src/codex-hook-injection.js`). Falls back to `--observe` / L1
+  when not enabled. Findings (verified against `codex-cli` 0.137.0 on Windows):
+  - **Mechanism fits.** Codex has a lifecycle-hooks system (`[[hooks.<Event>]]` in
+    `config.toml` or a `hooks.json`), with the `hooks` feature flag `stable` and ON
+    by default. Command hooks receive a JSON payload on **stdin**
+    (`session_id`, `hook_event_name`, `tool_name`, `cwd`) and treat *exit 0 with no
+    output* as continue — so our existing client-agnostic `haya-pet state` reporter
+    works unchanged. The hooks.json shape is identical to Claude's settings block;
+    **only the hook table differs**, which is all `codex-hooks.js` adds.
+  - **Event vocabulary differs** from Claude: no `Notification` / `PermissionDenied`
+    / `*Failure`; adds `PostCompact` / `SubagentStart`. `Stop` is the *only* idle
+    signal (`SubagentStop` is mid-turn → stays *thinking*). `PermissionRequest`
+    exists, so the approval cue is reachable.
+  - **Injection differs** — Codex has no `claude --settings <file>` equivalent.
+    Candidate non-mutating paths: `codex -p haya-pet` layering a generated
+    `$CODEX_HOME/haya-pet.config.toml` profile on top of the user's base config, or a
+    `hooks.json` next to the active config layer. Codex has its own *review hooks*
+    trust prompt (bypass: `--dangerously-bypass-hook-trust`), so the same one-time
+    trust UX as Claude applies.
+  - **Windows command quoting (fixed in the adapter):** Codex runs a hook `command`
+    via `cmd /c "<cmd>"`, which strips a **leading** quote — so Claude's
+    `"<node>" "<cli>" …` form dies with *"hook exited with code 1"*. The Codex
+    builder leaves the **program unquoted** (`<node> "<cli>" …`); args may be quoted.
+    Caveat: an unquoted program breaks if `node`'s path contains spaces (fine for
+    fnm/scoop/nvm layouts; a `command_windows` / short-path fallback is a follow-up).
+  - **No look-around in matchers:** Codex compiles matchers with the Rust `regex`
+    crate, which rejects `(?!…)` — Claude's negative-lookahead catch-all is a hard
+    parse error. Matchers are **anchored full matches** against the tool name, so
+    they must name tools exactly (`apply_patch`, `shell_command`).
+  - **Verified end-to-end** against `codex-cli` 0.137.0 (interactive TUI, Windows,
+    real `haya-pet state` reporter, `HAYA_PET_HOOK_DEBUG`): **`UserPromptSubmit`→
+    thinking, `PostToolUse`→thinking, `Stop`→idle all fire**, the parent env is
+    forwarded to hooks (session via `HAYA_PET_SESSION_ID`), and the reporter exits 0
+    cleanly. Note `codex exec` can't be used to test this — it forces
+    `approval_policy=never` + `sandbox=read`, a posture that disables hooks entirely.
+  - **Gap — `PreToolUse` does not fire** in 0.137 for tool calls, so `running_tool`
+    / `editing_files` never arrive yet (the entries are kept as harmless no-ops for
+    when it's fixed — [openai/codex#16732](https://github.com/openai/codex/issues/16732)).
+    `PermissionRequest` (the *waiting for approval* cue — the highest-value state)
+    is **unconfirmed**; it likely depends on an approval-required flow and needs a
+    dedicated test before the feature is worth wiring in.
 - **Antigravity (`agy`)** — **not yet implemented** (no hook injection). Uses
   `--observe` or L1 lifecycle. A Gemini-schema hook adapter is a planned follow-up.
 - **Generic / unknown** — no hooks; PTY observation (`--observe`) or L1 lifecycle.
@@ -112,7 +151,7 @@ for the clients that lack a hook adapter.
 | Tier | Source | How |
 |---|---|---|
 | L1 | process wrapper | default; session lifecycle + exit code |
-| L4 | client hooks | opt-in via `HAYA_PET_HOOKS=1` (Claude Code); reports through `haya-pet state …` |
+| L4 | client hooks | opt-in via `haya-pet hooks on` (Claude Code full, Codex partial); reports through `haya-pet state …` |
 | L2 | PTY output scraping | opt-in via `--observe` (terminal-fidelity tradeoff) |
 
 Native passthrough (L1) + opt-in hooks (L4) is the recommended setup for interactive

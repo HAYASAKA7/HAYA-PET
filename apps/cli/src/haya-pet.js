@@ -6,13 +6,14 @@ import { fileURLToPath } from "node:url";
 import { runGenericCommand as defaultRunGenericCommand } from "../../../packages/cli-core/src/run-command.js";
 import { parseStateArgs, runStateCommand } from "../../../packages/cli-core/src/run-state.js";
 import { injectClaudeHooks as defaultInjectClaudeHooks } from "../../../packages/cli-core/src/claude-hook-injection.js";
+import { injectCodexHooks as defaultInjectCodexHooks } from "../../../packages/cli-core/src/codex-hook-injection.js";
 import { watchClaudeTranscript as defaultWatchClaudeTranscript } from "../../../packages/cli-core/src/claude-transcript-watcher.js";
 import { ensureCompanionConnection } from "../../../packages/cli-core/src/companion-launcher.js";
 import { createIpcClient as defaultCreateIpcClient } from "../../../packages/daemon-core/src/ipc-server.js";
 import { getDefaultPaths } from "../../../packages/platform-core/src/paths.js";
 import { discoverPets as defaultDiscoverPets } from "../../../packages/pet-core/src/discovery.js";
 import { createStateFile as defaultCreateStateFile } from "../../../packages/app-state/src/state-file.js";
-import { getSelectedPetId, setSelectedPet, getClaudeHooksEnabled, setClaudeHooksEnabled } from "../../../packages/app-state/src/state.js";
+import { getSelectedPetId, setSelectedPet, getHooksEnabled, setHooksEnabled } from "../../../packages/app-state/src/state.js";
 import { getAdapterInfo } from "../../../packages/adapters/src/adapter-info.js";
 
 const CLIENT_DISPLAY_NAMES = Object.freeze({
@@ -123,7 +124,9 @@ export async function runStartCommand(_parsed, dependencies = {}) {
 async function runRunCommand(parsed, dependencies) {
   const runGenericCommand = dependencies.runGenericCommand ?? defaultRunGenericCommand;
   const injectClaudeHooks = dependencies.injectClaudeHooks ?? defaultInjectClaudeHooks;
+  const injectCodexHooks = dependencies.injectCodexHooks ?? defaultInjectCodexHooks;
   const watchClaudeTranscript = dependencies.watchClaudeTranscript ?? defaultWatchClaudeTranscript;
+  const print = dependencies.print ?? defaultPrint;
   const env = dependencies.env ?? process.env;
   const now = dependencies.now ?? Date.now;
   const cwd = dependencies.cwd ?? process.cwd();
@@ -135,14 +138,16 @@ async function runRunCommand(parsed, dependencies) {
   let cleanup = () => {};
   let stopWatcher = () => {};
 
-  // Claude Code: native passthrough is always the default (full terminal fidelity).
-  // Live-status hooks are OPT-IN — persisted via `haya-pet hooks on`, or per-run via
-  // HAYA_PET_HOOKS=1 — because injecting hooks makes Claude show a one-time "review
-  // hooks" trust prompt; we never disrupt the user's session uninvited. When enabled,
-  // inject a stable settings file so Claude reports live status via `haya-pet state`
-  // (no PTY, so Shift+Tab works).
-  const claudeHooksOn =
-    parsed.clientId === "claude-code" && (await resolveClaudeHooksEnabled(env, dependencies));
+  // Native passthrough is always the default (full terminal fidelity). Live-status
+  // hooks are OPT-IN — persisted via `haya-pet hooks on`, or per-run via
+  // HAYA_PET_HOOKS=1 — because injecting hooks makes the client show a one-time
+  // "review hooks" trust prompt; we never disrupt the user's session uninvited.
+  // Both clients report live status via the `haya-pet state` reporter (no PTY, so
+  // Shift+Tab works); the session id rides in via HAYA_PET_SESSION_ID.
+  const hooksOn = await resolveHooksEnabled(env, dependencies);
+
+  // Claude Code: inject a stable `--settings` file.
+  const claudeHooksOn = hooksOn && parsed.clientId === "claude-code";
   if (claudeHooksOn) {
     const injected = injectClaudeHooks();
     childArgs = [...parsed.childArgs, "--settings", injected.settingsPath];
@@ -175,6 +180,24 @@ async function runRunCommand(parsed, dependencies) {
     stopWatcher = watcher.stop;
   }
 
+  // Codex: no `--settings` equivalent, so inject a stable profile and add
+  // `-p <name>` at the FRONT (a global flag must precede any subcommand). Codex
+  // takes only one profile, so if the user already passes their own -p/--profile
+  // we skip injection and say so rather than clobber their choice.
+  const codexHooksOn = hooksOn && parsed.clientId === "codex";
+  if (codexHooksOn) {
+    if (hasProfileArg(parsed.childArgs)) {
+      print(
+        "haya-pet: Codex live-status hooks skipped — you passed your own -p/--profile (Codex allows only one)."
+      );
+    } else {
+      const injected = injectCodexHooks();
+      childArgs = ["-p", injected.profileName, ...parsed.childArgs];
+      childEnv = { ...env, HAYA_PET_SESSION_ID: sessionId };
+      cleanup = injected.cleanup;
+    }
+  }
+
   try {
     return await runGenericCommand({
       command: parsed.childCommand,
@@ -197,10 +220,11 @@ async function runRunCommand(parsed, dependencies) {
   }
 }
 
-// Resolve whether Claude Code hooks should be injected for this run.
-// Precedence: HAYA_PET_NO_HOOKS forces off, HAYA_PET_HOOKS forces on (per-run
-// overrides), otherwise the persisted `haya-pet hooks on/off` preference.
-async function resolveClaudeHooksEnabled(env, dependencies) {
+// Resolve whether live-status hooks should be injected for this run (any
+// hook-capable client). Precedence: HAYA_PET_NO_HOOKS forces off, HAYA_PET_HOOKS
+// forces on (per-run overrides), otherwise the persisted `haya-pet hooks on/off`
+// preference.
+async function resolveHooksEnabled(env, dependencies) {
   if (isTruthyFlag(env.HAYA_PET_NO_HOOKS)) {
     return false;
   }
@@ -209,7 +233,7 @@ async function resolveClaudeHooksEnabled(env, dependencies) {
   }
   try {
     const state = await createConfigStateFile(dependencies).load();
-    return getClaudeHooksEnabled(state);
+    return getHooksEnabled(state);
   } catch {
     return false;
   }
@@ -217,6 +241,14 @@ async function resolveClaudeHooksEnabled(env, dependencies) {
 
 function isTruthyFlag(value) {
   return value === "1" || value === "true";
+}
+
+// Detect a user-supplied Codex profile flag so we don't clobber it: -p, --profile,
+// or the `--profile=foo` / `-p=foo` forms.
+function hasProfileArg(args) {
+  return args.some(
+    (arg) => arg === "-p" || arg === "--profile" || arg.startsWith("--profile=") || arg.startsWith("-p=")
+  );
 }
 
 function createConfigStateFile(dependencies) {
@@ -310,25 +342,26 @@ function parseHooksArgs(args) {
   throw new Error(`Unknown hooks action: ${action} (use on, off, or status)`);
 }
 
-// Persisted toggle for Claude Code live-status hooks (the convenient alternative
-// to setting HAYA_PET_HOOKS every shell).
+// Persisted GLOBAL toggle for live-status hooks (the convenient alternative to
+// setting HAYA_PET_HOOKS every shell). Covers every hook-capable client — Claude
+// Code and Codex today.
 export async function runHooksCommand(parsed, dependencies = {}) {
   const print = dependencies.print ?? defaultPrint;
   const stateFile = createConfigStateFile(dependencies);
   const state = await stateFile.load();
 
   if (parsed.action === "status") {
-    const enabled = getClaudeHooksEnabled(state);
-    print(`Claude Code live-status hooks: ${enabled ? "on" : "off"}`);
+    const enabled = getHooksEnabled(state);
+    print(`Live-status hooks: ${enabled ? "on" : "off"}`);
     return { command: "hooks", action: "status", enabled };
   }
 
   const enabled = parsed.action === "on";
-  await stateFile.save(setClaudeHooksEnabled(state, enabled));
+  await stateFile.save(setHooksEnabled(state, enabled));
   print(
     enabled
-      ? "Claude Code live-status hooks: on. The first `haya-pet run --client claude-code` asks Claude to review the hooks once — approve it."
-      : "Claude Code live-status hooks: off."
+      ? "Live-status hooks: on. The first `haya-pet run` for Claude Code or Codex asks the client to review the hooks once — approve it."
+      : "Live-status hooks: off."
   );
   return { command: "hooks", action: parsed.action, enabled };
 }

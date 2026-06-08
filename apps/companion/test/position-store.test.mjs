@@ -18,7 +18,7 @@ test("creates default position state", () => {
     settings: {
       displayMode: "hybrid",
       attachBubblesToTerminals: true,
-      claudeHooks: false
+      hooksEnabled: false
     }
   });
 });

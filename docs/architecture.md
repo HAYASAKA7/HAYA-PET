@@ -50,16 +50,28 @@ as each client allows:
 | L1 | Process wrapper (lifecycle only) | session exists / exit code |
 | L2 | PTY output observation (`--observe`, opt-in) | activity-based working/idle |
 | L3 | Client logs / state files | client-specific (future) |
-| L4 | Client hooks | richest — implemented for Claude Code |
+| L4 | Client hooks | richest — implemented for Claude Code (full) and Codex (partial) |
 
 The **default** is native passthrough (`stdio: "inherit"`) for full terminal
 fidelity, with **L1 lifecycle** status for every client. Richer status is opt-in:
-**Claude Code** gains **L4 hooks** when enabled with `haya-pet hooks on`
-(persisted; or per-run via `HAYA_PET_HOOKS=1`) — injected via
-`claude --settings <stable-file>`, reporting in-session activity through the
-`haya-pet state` command — lifecycle still comes from the wrapper's exit code);
-any client gains **L2** with `--observe`. Hooks are opt-in because injecting them
-triggers Claude's one-time *review hooks* trust prompt.
+**Claude Code** and **Codex** gain **L4 hooks** when enabled with the global
+`haya-pet hooks on` (persisted; or per-run via `HAYA_PET_HOOKS=1`). Both report
+in-session activity through the shared, client-agnostic `haya-pet state` command
+(lifecycle still comes from the wrapper's exit code); any client gains **L2** with
+`--observe`. Hooks are opt-in because injecting them triggers the client's one-time
+*review hooks* trust prompt.
+
+The injection mechanism differs per client. **Claude Code** takes a stable
+`claude --settings <file>`. **Codex** has no per-invocation settings flag, so the
+wrapper writes a stable `$CODEX_HOME/haya-pet.config.toml` profile and prepends
+`-p haya-pet` to the codex args (a profile layers on top of the user's base config,
+leaving auth/model/MCP intact, and is inert otherwise). Codex allows only one
+profile, so if the user already passes `-p/--profile`, injection is skipped with a
+notice. Codex's hook command must be unquoted at the program position (it runs via
+`cmd /c`, which strips a leading quote) and its matchers can't use look-around
+(Rust regex) — see [known-issues.md](known-issues.md). Codex's L4 is **partial**:
+`PreToolUse`/`PermissionRequest` don't fire upstream yet, so only `thinking`/`idle`
+arrive today.
 
 L2 is **activity-based**: any visible output → *working*; a short quiet window →
 *idle*; success/failure come from the real exit code, never from scraping output

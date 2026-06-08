@@ -13,23 +13,28 @@ export function createDefaultPositionState() {
     settings: {
       displayMode: "hybrid",
       attachBubblesToTerminals: true,
-      claudeHooks: false
+      hooksEnabled: false
     }
   };
 }
 
-export function setClaudeHooksEnabled(state, enabled) {
+// Global live-status hooks toggle — covers every hook-capable client (Claude Code,
+// Codex). One switch keeps the user-facing model simple; per-run env vars still
+// override it (see resolveHooksEnabled in the CLI).
+export function setHooksEnabled(state, enabled) {
   return {
     ...state,
     settings: {
       ...state.settings,
-      claudeHooks: Boolean(enabled)
+      hooksEnabled: Boolean(enabled)
     }
   };
 }
 
-export function getClaudeHooksEnabled(state) {
-  return Boolean(state?.settings?.claudeHooks);
+export function getHooksEnabled(state) {
+  // Back-compat: honor the legacy Claude-only `claudeHooks` key if a user enabled
+  // it before the toggle went global.
+  return Boolean(state?.settings?.hooksEnabled ?? state?.settings?.claudeHooks);
 }
 
 export function updateGlobalPetPosition(state, position) {
