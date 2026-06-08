@@ -48,14 +48,23 @@ as each client allows:
 | Tier | Source | Fidelity |
 |---|---|---|
 | L1 | Process wrapper (lifecycle only) | session exists / exit code |
-| L2 | PTY output observation (`--observe`, default) | activity-based working/idle |
+| L2 | PTY output observation (`--observe`, opt-in) | activity-based working/idle |
 | L3 | Client logs / state files | client-specific (future) |
-| L4 | Official plugin/hooks | richest (future) |
+| L4 | Client hooks | richest — implemented for Claude Code |
+
+The **default** is native passthrough (`stdio: "inherit"`) for full terminal
+fidelity, with **L1 lifecycle** status for every client. Richer status is opt-in:
+**Claude Code** gains **L4 hooks** with `HAYA_PET_HOOKS=1` (injected via
+`claude --settings <stable-file>`, reporting in-session activity through the
+`haya-pet state` command — lifecycle still comes from the wrapper's exit code);
+any client gains **L2** with `--observe`. Hooks are opt-in because injecting them
+triggers Claude's one-time *review hooks* trust prompt.
 
 L2 is **activity-based**: any visible output → *working*; a short quiet window →
 *idle*; success/failure come from the real exit code, never from scraping output
-text. Keyword heuristics exist but are opt-in (unreliable on rich TUIs). See
-[known-issues.md](known-issues.md) for the current L2/PTY tradeoffs.
+text. It is opt-in because routing input through a PTY (ConPTY on Windows) breaks
+special keys like Shift+Tab — see [known-issues.md](known-issues.md) for the
+L2/PTY tradeoffs.
 
 ## Overlay model
 

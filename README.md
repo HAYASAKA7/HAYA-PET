@@ -51,7 +51,9 @@ Haya Pet watches all of them and presents one ambient interface:
 - 🧠 **Normalized state model** — every client maps to a shared state vocabulary
   (`thinking`, `running_tool`, `waiting_approval`, `reviewing`, `failed`, …).
 - 🧩 **Client adapters** with tiered support (process wrapper → PTY observer →
-  log/state → official plugin) so the daemon never bakes in client-specific logic.
+  client hooks) so the daemon never bakes in client-specific logic. Default is
+  lifecycle status; richer status is opt-in (Claude Code hooks via `HAYA_PET_HOOKS=1`,
+  or PTY `--observe` for any client).
 - 🚀 **Zero-setup launch** — `haya-pet run …` auto-starts the overlay; no separate
   daemon to manage.
 - 🖼️ **Codex-compatible pet assets** (1536×1872 sprite atlas, 9 actions).
@@ -92,8 +94,10 @@ Haya Pet watches all of them and presents one ambient interface:
 | **Node ≥ 18** | Runtime + companion (Electron) |
 | **npm** | Install + scripts |
 
-> Live activity status uses the optional `node-pty` (installed automatically when
-> it can build; the pet degrades to lifecycle-only tracking without it).
+> Default status is lifecycle-only and needs no extra modules. Opt-in Claude Code
+> hooks (`HAYA_PET_HOOKS=1`) also need none. The opt-in `--observe` PTY mode uses
+> `node-pty` (installed automatically when it can build; without it, `--observe`
+> degrades to lifecycle-only tracking).
 
 ## Install
 
@@ -138,19 +142,38 @@ shows success (a green check) or failure (a red cross), then fades.
 
 ### Live activity status
 
-By default the wrapper runs the CLI through a pseudo-terminal and shows *working*
-while the AI produces output, returning to *idle* after a short quiet window.
-Success/failure come from the real exit code — never from scraping the word
-"error" out of output. Your terminal stays fully interactive.
+`haya-pet run` uses **native passthrough by default** — the CLI talks directly to
+your terminal, so every input mode (Shift+Tab, mouse wheel, word-edit) works
+exactly as it does without the wrapper. Out of the box, every client shows
+**lifecycle status** (a session bubble while it runs; success/failure from the
+real exit code, never from scraping "error" out of output).
 
 ```bash
-haya-pet run -- claude          # live status (default)
-haya-pet run --no-observe -- claude   # lifecycle only (opt out of PTY observation)
+haya-pet run --client claude-code -- claude   # full fidelity, lifecycle status
+haya-pet run --client codex       -- codex    # full fidelity, lifecycle status
 ```
 
-> ⚠️ Running a CLI through the default PTY observation currently affects terminal
-> scrolling and backspace in some setups — see
-> [docs/known-issues.md](docs/known-issues.md). `--no-observe` avoids it.
+Two **opt-in** ways to get richer *in-session* status (thinking / running tools /
+editing files / waiting for approval):
+
+```bash
+# Claude Code — live status via per-session hooks, NO terminal-fidelity tradeoff.
+# First run shows a one-time Claude "review hooks" prompt you approve once.
+$env:HAYA_PET_HOOKS=1; haya-pet run --client claude-code -- claude   # PowerShell
+HAYA_PET_HOOKS=1 haya-pet run --client claude-code -- claude         # bash
+
+# Any client — coarse live status by watching output through a PTY.
+haya-pet run --observe --client codex -- codex
+```
+
+> **Why opt-in?**
+> - **Hooks (`HAYA_PET_HOOKS=1`, Claude Code):** injecting hooks makes Claude show
+>   a one-time *review hooks* trust prompt. We don't disrupt your session by
+>   default; enable it once you're happy to approve the hooks.
+> - **`--observe` (any client):** PTY observation infers status from output, but on
+>   Windows it routes input through ConPTY, which can break **Shift+Tab**, mouse
+>   scroll, and word-edit. Use it only for non-interactive runs. See
+>   [docs/known-issues.md](docs/known-issues.md).
 
 ## Add and choose a pet
 

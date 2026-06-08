@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 import { realpathSync } from "node:fs";
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { runGenericCommand as defaultRunGenericCommand } from "../../../packages/cli-core/src/run-command.js";
+import { parseStateArgs, runStateCommand } from "../../../packages/cli-core/src/run-state.js";
+import { injectClaudeHooks as defaultInjectClaudeHooks } from "../../../packages/cli-core/src/claude-hook-injection.js";
 import { ensureCompanionConnection } from "../../../packages/cli-core/src/companion-launcher.js";
 import { createIpcClient as defaultCreateIpcClient } from "../../../packages/daemon-core/src/ipc-server.js";
 import { getDefaultPaths } from "../../../packages/platform-core/src/paths.js";
@@ -41,6 +44,10 @@ export function parseAiPetArgs(argv) {
     return { command: "stop" };
   }
 
+  if (command === "state") {
+    return parseStateArgs(rest);
+  }
+
   throw new Error(`Unsupported haya-pet command: ${command}`);
 }
 
@@ -57,6 +64,10 @@ export async function runAiPet(argv, dependencies = {}) {
 
   if (parsed.command === "stop") {
     return runStopCommand(parsed, dependencies);
+  }
+
+  if (parsed.command === "state") {
+    return runStateCommand(parsed, dependencies);
   }
 
   return runRunCommand(parsed, dependencies);
@@ -102,24 +113,51 @@ export async function runStartCommand(_parsed, dependencies = {}) {
 
 async function runRunCommand(parsed, dependencies) {
   const runGenericCommand = dependencies.runGenericCommand ?? defaultRunGenericCommand;
+  const injectClaudeHooks = dependencies.injectClaudeHooks ?? defaultInjectClaudeHooks;
+  const env = dependencies.env ?? process.env;
   const messageSender = await createMessageSender(dependencies);
+
+  const sessionId = dependencies.sessionId ?? `sess_${randomUUID()}`;
+  let childArgs = parsed.childArgs;
+  let childEnv = env;
+  let cleanup = () => {};
+
+  // Claude Code: native passthrough is always the default (full terminal fidelity).
+  // Live-status hooks are OPT-IN (HAYA_PET_HOOKS=1) because injecting hooks makes
+  // Claude show a one-time "review hooks" trust prompt; we never want to disrupt
+  // the user's session by default. When enabled, inject a stable settings file so
+  // Claude reports live status via `haya-pet state` (no PTY, so Shift+Tab works).
+  if (parsed.clientId === "claude-code" && hooksEnabled(env)) {
+    const injected = injectClaudeHooks();
+    childArgs = [...parsed.childArgs, "--settings", injected.settingsPath];
+    childEnv = { ...env, HAYA_PET_SESSION_ID: sessionId };
+    cleanup = injected.cleanup;
+  }
 
   try {
     return await runGenericCommand({
       command: parsed.childCommand,
-      args: parsed.childArgs,
+      args: childArgs,
       cwd: dependencies.cwd ?? process.cwd(),
       clientId: parsed.clientId,
       clientDisplayName: CLIENT_DISPLAY_NAMES[parsed.clientId] ?? parsed.clientId,
       observe: parsed.observe,
+      sessionId,
+      env: childEnv,
       heartbeatIntervalMs: dependencies.heartbeatIntervalMs,
       now: dependencies.now,
       stdio: dependencies.stdio,
       send: messageSender.send
     });
   } finally {
+    cleanup();
     await messageSender.close();
   }
+}
+
+function hooksEnabled(env) {
+  const flag = env.HAYA_PET_HOOKS;
+  return flag === "1" || flag === "true";
 }
 
 export async function runPetsCommand(parsed, dependencies = {}) {
@@ -205,7 +243,7 @@ function parsePetsArgs(args) {
 
 function parseRunArgs(args) {
   let clientId = "generic";
-  let observe = true; // live PTY observation is on by default; --no-observe opts out
+  let observe = false; // native passthrough by default (full terminal fidelity); --observe opts in
   let childStart = -1;
 
   for (let index = 0; index < args.length; index += 1) {

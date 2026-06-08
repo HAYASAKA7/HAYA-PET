@@ -5,6 +5,26 @@ import { basename, join } from "node:path";
 import { test } from "../../../test/harness.mjs";
 import { runGenericCommand } from "../src/run-command.js";
 
+test("runGenericCommand passes a custom env into the child", async () => {
+  const sent = [];
+  const result = await runGenericCommand({
+    command: process.execPath,
+    args: ["-e", "process.stdout.write(process.env.HAYA_PET_SESSION_ID || 'MISSING')"],
+    cwd: process.cwd(),
+    clientId: "generic",
+    clientDisplayName: "Generic",
+    stdio: "ignore",
+    observe: false,
+    heartbeatIntervalMs: 10,
+    env: { ...process.env, HAYA_PET_SESSION_ID: "sess_env_pass" },
+    send: async (message) => sent.push(message)
+  });
+
+  assert.equal(result.exitCode, 0);
+  const register = sent.find((m) => m.type === "register");
+  assert.ok(register && register.pid, "child launched with the custom env");
+});
+
 function createClock(start = 1000, step = 10) {
   let current = start;
   return () => {

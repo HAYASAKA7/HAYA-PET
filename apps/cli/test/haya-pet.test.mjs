@@ -17,12 +17,12 @@ test("parses generic run command arguments", () => {
   );
 });
 
-test("observation is on by default and --no-observe opts out", () => {
-  assert.equal(parseAiPetArgs(["run", "--client", "codex"]).observe, true);
-  assert.equal(parseAiPetArgs(["run", "--no-observe", "--client", "codex"]).observe, false);
+test("native passthrough is the default and --observe opts in", () => {
+  assert.equal(parseAiPetArgs(["run", "--client", "codex"]).observe, false);
+  assert.equal(parseAiPetArgs(["run", "--observe", "--client", "codex"]).observe, true);
 
   const parsedWithCommand = parseAiPetArgs(["run", "--", "claude", "--resume"]);
-  assert.equal(parsedWithCommand.observe, true);
+  assert.equal(parsedWithCommand.observe, false);
   assert.equal(parsedWithCommand.childCommand, "claude");
   assert.deepEqual(parsedWithCommand.childArgs, ["--resume"]);
 });
@@ -324,6 +324,70 @@ test("stop command is a no-op when nothing is running", async () => {
   assert.equal(result.ok, true);
   assert.equal(result.wasRunning, false);
   assert.ok(lines.some((line) => line.includes("not running")));
+});
+
+test("parses the state command", () => {
+  assert.deepEqual(parseAiPetArgs(["state", "thinking", "--session", "sess_q"]), {
+    command: "state",
+    state: "thinking",
+    summary: undefined,
+    session: "sess_q"
+  });
+});
+
+test("claude-code does NOT inject hooks by default (safe out-of-box)", async () => {
+  const calls = [];
+  let injected = 0;
+  await runAiPet(["run", "--client", "claude-code", "--", "claude"], {
+    cwd: process.cwd(),
+    env: { USERPROFILE: "C:\\Users\\A" },
+    heartbeatIntervalMs: 10,
+    send: async () => {},
+    injectClaudeHooks: () => { injected += 1; return { settingsPath: "x", cleanup: () => {} }; },
+    runGenericCommand: async (options) => {
+      calls.push(options);
+      return { sessionId: "s", pid: 1, exitCode: 0 };
+    }
+  });
+
+  assert.equal(injected, 0, "no hook injection unless opted in");
+  assert.deepEqual(calls[0].args, []);
+});
+
+test("HAYA_PET_HOOKS=1 opts claude-code into --settings + HAYA_PET_SESSION_ID", async () => {
+  const calls = [];
+  await runAiPet(["run", "--client", "claude-code", "--", "claude"], {
+    cwd: process.cwd(),
+    env: { HAYA_PET_HOOKS: "1", USERPROFILE: "C:\\Users\\A", HOME: "/home/a" },
+    heartbeatIntervalMs: 10,
+    send: async () => {},
+    injectClaudeHooks: () => ({ settingsPath: "/tmp/s.json", cleanup: () => {} }),
+    runGenericCommand: async (options) => {
+      calls.push(options);
+      return { sessionId: options.sessionId, pid: 1, exitCode: 0 };
+    }
+  });
+
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].args, ["--settings", "/tmp/s.json"]);
+  assert.equal(calls[0].env.HAYA_PET_SESSION_ID, calls[0].sessionId);
+  assert.ok(calls[0].sessionId, "a session id was generated and shared via env");
+});
+
+test("non-claude clients are never injected even with HAYA_PET_HOOKS=1", async () => {
+  const calls = [];
+  await runAiPet(["run", "--client", "codex", "--", "codex"], {
+    cwd: process.cwd(),
+    env: { HAYA_PET_HOOKS: "1", USERPROFILE: "C:\\Users\\A" },
+    heartbeatIntervalMs: 10,
+    send: async () => {},
+    injectClaudeHooks: () => { throw new Error("should not inject for codex"); },
+    runGenericCommand: async (options) => {
+      calls.push(options);
+      return { sessionId: "s", pid: 1, exitCode: 0 };
+    }
+  });
+  assert.deepEqual(calls[0].args, []);
 });
 
 async function waitFor(predicate) {

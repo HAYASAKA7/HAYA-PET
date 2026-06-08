@@ -22,7 +22,8 @@ export async function runGenericCommand(options) {
     stdio = "inherit",
     shell: shellOption,
     observe = false,
-    spawnPty
+    spawnPty,
+    env = process.env
   } = options ?? {};
 
   if (typeof command !== "string" || command.trim() === "") {
@@ -61,6 +62,7 @@ export async function runGenericCommand(options) {
         heartbeatIntervalMs,
         now,
         send,
+        env,
         spawnPty: ptyLauncher
       });
     }
@@ -72,8 +74,8 @@ export async function runGenericCommand(options) {
   // With shell:true Node concatenates an args array without escaping (DEP0190),
   // so when we need a shell we pass a single, pre-quoted command string instead.
   const child = useShell
-    ? spawn(buildShellCommand(command, args), { cwd, stdio, shell: true })
-    : spawn(command, args, { cwd, stdio });
+    ? spawn(buildShellCommand(command, args), { cwd, stdio, shell: true, env })
+    : spawn(command, args, { cwd, stdio, env });
   const closePromise = waitForClose(child);
 
   if (!child.pid) {
@@ -178,6 +180,7 @@ async function runObservedCommand({
   heartbeatIntervalMs,
   now,
   send,
+  env,
   spawnPty
 }) {
   const startedAt = now();
@@ -224,6 +227,7 @@ async function runObservedCommand({
     command: ptyCommand,
     args: ptyArgs,
     cwd,
+    env,
     onData: (data) => observer.push(stripAnsi(data.toString())),
     onInput: () => observer.noteInput()
   });
