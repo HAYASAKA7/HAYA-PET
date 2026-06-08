@@ -17,7 +17,8 @@ test("creates default position state", () => {
     sessions: {},
     settings: {
       displayMode: "hybrid",
-      attachBubblesToTerminals: true
+      attachBubblesToTerminals: true,
+      claudeHooks: false
     }
   });
 });

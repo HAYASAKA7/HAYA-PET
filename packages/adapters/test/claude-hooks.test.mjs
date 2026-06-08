@@ -11,6 +11,7 @@ test("mapClaudeEventToState covers activity events", () => {
   assert.equal(mapClaudeEventToState("StopFailure"), "idle");
   assert.equal(mapClaudeEventToState("SubagentStop"), "idle");
   assert.equal(mapClaudeEventToState("PermissionDenied"), "idle");
+  assert.equal(mapClaudeEventToState("PermissionRequest"), "waiting_approval");
   assert.equal(mapClaudeEventToState("Unknown"), undefined);
 });
 
@@ -78,7 +79,8 @@ test("buildClaudeHookSettings includes all subscribed events", () => {
   const settings = buildClaudeHookSettings({ nodePath: "n", cliPath: "c" });
   for (const event of [
     "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure",
-    "Notification", "PermissionDenied", "PreCompact", "Stop", "StopFailure", "SubagentStop"
+    "PermissionRequest", "Notification", "PermissionDenied", "PreCompact",
+    "Stop", "StopFailure", "SubagentStop"
   ]) {
     assert.ok(settings.hooks[event], `missing hook event ${event}`);
   }

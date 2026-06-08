@@ -54,7 +54,8 @@ as each client allows:
 
 The **default** is native passthrough (`stdio: "inherit"`) for full terminal
 fidelity, with **L1 lifecycle** status for every client. Richer status is opt-in:
-**Claude Code** gains **L4 hooks** with `HAYA_PET_HOOKS=1` (injected via
+**Claude Code** gains **L4 hooks** when enabled with `haya-pet hooks on`
+(persisted; or per-run via `HAYA_PET_HOOKS=1`) — injected via
 `claude --settings <stable-file>`, reporting in-session activity through the
 `haya-pet state` command — lifecycle still comes from the wrapper's exit code);
 any client gains **L2** with `--observe`. Hooks are opt-in because injecting them

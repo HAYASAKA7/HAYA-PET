@@ -26,6 +26,9 @@ const HOOK_TABLE = Object.freeze([
   { event: "PreToolUse", matcher: NON_EDIT_MATCHER, state: "running_tool" },
   { event: "PostToolUse", state: "thinking" },
   { event: "PostToolUseFailure", state: "thinking", summary: "tool-failed" },
+  // PermissionRequest fires the instant the dialog appears — earlier than the
+  // permission_prompt Notification, so the "waiting for approval" cue is snappy.
+  { event: "PermissionRequest", state: "waiting_approval" },
   { event: "Notification", matcher: "permission_prompt", state: "waiting_approval" },
   { event: "Notification", matcher: "idle_prompt", state: "idle", summary: "idle" },
   { event: "PermissionDenied", state: "idle", summary: "denied" },

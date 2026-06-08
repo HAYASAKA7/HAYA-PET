@@ -12,9 +12,24 @@ export function createDefaultPositionState() {
     sessions: {},
     settings: {
       displayMode: "hybrid",
-      attachBubblesToTerminals: true
+      attachBubblesToTerminals: true,
+      claudeHooks: false
     }
   };
+}
+
+export function setClaudeHooksEnabled(state, enabled) {
+  return {
+    ...state,
+    settings: {
+      ...state.settings,
+      claudeHooks: Boolean(enabled)
+    }
+  };
+}
+
+export function getClaudeHooksEnabled(state) {
+  return Boolean(state?.settings?.claudeHooks);
 }
 
 export function updateGlobalPetPosition(state, position) {

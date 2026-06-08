@@ -335,6 +335,11 @@ test("parses the state command", () => {
   });
 });
 
+const hooksStateFile = (claudeHooks) => () => ({
+  load: async () => ({ settings: { claudeHooks } }),
+  save: async (state) => state
+});
+
 test("claude-code does NOT inject hooks by default (safe out-of-box)", async () => {
   const calls = [];
   let injected = 0;
@@ -343,6 +348,7 @@ test("claude-code does NOT inject hooks by default (safe out-of-box)", async () 
     env: { USERPROFILE: "C:\\Users\\A" },
     heartbeatIntervalMs: 10,
     send: async () => {},
+    createStateFile: hooksStateFile(false),
     injectClaudeHooks: () => { injected += 1; return { settingsPath: "x", cleanup: () => {} }; },
     runGenericCommand: async (options) => {
       calls.push(options);
@@ -354,14 +360,79 @@ test("claude-code does NOT inject hooks by default (safe out-of-box)", async () 
   assert.deepEqual(calls[0].args, []);
 });
 
+test("persisted `hooks on` opts claude-code into injection without an env var", async () => {
+  const calls = [];
+  let injected = 0;
+  await runAiPet(["run", "--client", "claude-code", "--", "claude"], {
+    cwd: process.cwd(),
+    env: { USERPROFILE: "C:\\Users\\A" }, // no HAYA_PET_HOOKS
+    heartbeatIntervalMs: 10,
+    send: async () => {},
+    createStateFile: hooksStateFile(true), // persisted preference = on
+    injectClaudeHooks: () => { injected += 1; return { settingsPath: "/tmp/s.json", cleanup: () => {} }; },
+    watchClaudeTranscript: () => ({ stop: () => {} }),
+    runGenericCommand: async (options) => {
+      calls.push(options);
+      return { sessionId: options.sessionId, pid: 1, exitCode: 0 };
+    }
+  });
+
+  assert.equal(injected, 1, "config preference enables hooks");
+  assert.deepEqual(calls[0].args, ["--settings", "/tmp/s.json"]);
+});
+
+test("HAYA_PET_NO_HOOKS=1 overrides a persisted `hooks on`", async () => {
+  const calls = [];
+  let injected = 0;
+  await runAiPet(["run", "--client", "claude-code", "--", "claude"], {
+    cwd: process.cwd(),
+    env: { HAYA_PET_NO_HOOKS: "1", USERPROFILE: "C:\\Users\\A" },
+    heartbeatIntervalMs: 10,
+    send: async () => {},
+    createStateFile: hooksStateFile(true),
+    injectClaudeHooks: () => { injected += 1; return { settingsPath: "x", cleanup: () => {} }; },
+    runGenericCommand: async (options) => {
+      calls.push(options);
+      return { sessionId: "s", pid: 1, exitCode: 0 };
+    }
+  });
+
+  assert.equal(injected, 0, "env override forces hooks off");
+  assert.deepEqual(calls[0].args, []);
+});
+
+test("hooks command parses and persists the toggle", async () => {
+  assert.deepEqual(parseAiPetArgs(["hooks"]), { command: "hooks", action: "status" });
+  assert.deepEqual(parseAiPetArgs(["hooks", "on"]), { command: "hooks", action: "on" });
+  assert.throws(() => parseAiPetArgs(["hooks", "bogus"]), /Unknown hooks action/);
+
+  let saved;
+  const lines = [];
+  const store = {
+    load: async () => ({ settings: { claudeHooks: false } }),
+    save: async (state) => { saved = state; return state; }
+  };
+  const result = await runAiPet(["hooks", "on"], {
+    homeDir: "C:\\Users\\A",
+    createStateFile: () => store,
+    print: (line) => lines.push(line)
+  });
+
+  assert.equal(result.enabled, true);
+  assert.equal(saved.settings.claudeHooks, true);
+  assert.ok(lines.some((l) => l.includes("on")));
+});
+
 test("HAYA_PET_HOOKS=1 opts claude-code into --settings + HAYA_PET_SESSION_ID", async () => {
   const calls = [];
+  let watched = 0;
   await runAiPet(["run", "--client", "claude-code", "--", "claude"], {
     cwd: process.cwd(),
     env: { HAYA_PET_HOOKS: "1", USERPROFILE: "C:\\Users\\A", HOME: "/home/a" },
     heartbeatIntervalMs: 10,
     send: async () => {},
     injectClaudeHooks: () => ({ settingsPath: "/tmp/s.json", cleanup: () => {} }),
+    watchClaudeTranscript: () => { watched += 1; return { stop: () => {} }; },
     runGenericCommand: async (options) => {
       calls.push(options);
       return { sessionId: options.sessionId, pid: 1, exitCode: 0 };
@@ -372,6 +443,32 @@ test("HAYA_PET_HOOKS=1 opts claude-code into --settings + HAYA_PET_SESSION_ID", 
   assert.deepEqual(calls[0].args, ["--settings", "/tmp/s.json"]);
   assert.equal(calls[0].env.HAYA_PET_SESSION_ID, calls[0].sessionId);
   assert.ok(calls[0].sessionId, "a session id was generated and shared via env");
+  assert.equal(watched, 1, "transcript watcher started for approval-denial recovery");
+});
+
+test("a transcript denial clears the stuck approval to idle", async () => {
+  const sent = [];
+  let fireDenial;
+  await runAiPet(["run", "--client", "claude-code", "--", "claude"], {
+    cwd: process.cwd(),
+    env: { HAYA_PET_HOOKS: "1", USERPROFILE: "C:\\Users\\A" },
+    now: () => 42,
+    heartbeatIntervalMs: 10,
+    send: async (message) => sent.push(message),
+    injectClaudeHooks: () => ({ settingsPath: "/tmp/s.json", cleanup: () => {} }),
+    watchClaudeTranscript: ({ onDenial }) => { fireDenial = onDenial; return { stop: () => {} }; },
+    runGenericCommand: async (options) => {
+      // Simulate the user denying a permission mid-session.
+      fireDenial({ type: "tool_denied", toolUseId: "toolu_1" });
+      return { sessionId: options.sessionId, pid: 1, exitCode: 0 };
+    }
+  });
+
+  const idle = sent.find((m) => m.type === "state" && m.source === "client_log");
+  assert.ok(idle, "a client_log state was sent on denial");
+  assert.equal(idle.state, "idle");
+  assert.equal(idle.summary, "approval denied");
+  assert.equal(idle.updatedAt, 42);
 });
 
 test("non-claude clients are never injected even with HAYA_PET_HOOKS=1", async () => {

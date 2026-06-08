@@ -2,6 +2,28 @@
 
 Issues found in live use, with their current status.
 
+## ✅ Resolved: pet stuck on "waiting for approval" after a manual denial
+
+- **Symptom:** With Claude Code hooks enabled, denying a permission prompt left the
+  pet showing *waiting for approval* indefinitely (until the next turn), even
+  though nothing was pending.
+- **Root cause:** Claude Code fires **no hook** when the user manually denies a
+  permission — not `Stop`, not `PostToolUse`, not `PermissionDenied` (that one is
+  only for *auto-mode* classifier denials). Verified by `HAYA_PET_HOOK_DEBUG`
+  traces: the event stream simply stops after `Notification(permission_prompt)`.
+  So the hook-driven status had no event to clear `waiting_approval`. A timeout was
+  rejected — it would wrongly clear a *genuinely* pending approval if the user
+  stepped away.
+- **Fix:** An **L3 transcript watcher** (`claude-transcript-watcher.js`) tails the
+  session JSONL (`~/.claude/projects/<sanitized-cwd>/<id>.jsonl`, matched
+  case-insensitively). Claude records a denial as a `tool_result` with
+  `is_error: true` and a "user doesn't want to proceed / user rejected" marker —
+  ground truth, not a timer. On seeing it, the wrapper reports `idle`
+  (source `client_log`). A genuinely-pending approval has no such result yet, so
+  the alert correctly stays up until the user actually decides. Also split the
+  `Notification` hook by type (`permission_prompt`→approval, `idle_prompt`→idle) so
+  non-approval notifications no longer masquerade as approvals.
+
 ## ✅ Resolved: Claude Code TUI accepted no keyboard input when hooks were injected
 
 - **Symptom:** With per-session hooks injected by default (`claude --settings

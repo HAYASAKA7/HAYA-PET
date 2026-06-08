@@ -1,17 +1,18 @@
 #!/usr/bin/env node
-import { realpathSync } from "node:fs";
+import { realpathSync, appendFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { runGenericCommand as defaultRunGenericCommand } from "../../../packages/cli-core/src/run-command.js";
 import { parseStateArgs, runStateCommand } from "../../../packages/cli-core/src/run-state.js";
 import { injectClaudeHooks as defaultInjectClaudeHooks } from "../../../packages/cli-core/src/claude-hook-injection.js";
+import { watchClaudeTranscript as defaultWatchClaudeTranscript } from "../../../packages/cli-core/src/claude-transcript-watcher.js";
 import { ensureCompanionConnection } from "../../../packages/cli-core/src/companion-launcher.js";
 import { createIpcClient as defaultCreateIpcClient } from "../../../packages/daemon-core/src/ipc-server.js";
 import { getDefaultPaths } from "../../../packages/platform-core/src/paths.js";
 import { discoverPets as defaultDiscoverPets } from "../../../packages/pet-core/src/discovery.js";
 import { createStateFile as defaultCreateStateFile } from "../../../packages/app-state/src/state-file.js";
-import { getSelectedPetId, setSelectedPet } from "../../../packages/app-state/src/state.js";
+import { getSelectedPetId, setSelectedPet, getClaudeHooksEnabled, setClaudeHooksEnabled } from "../../../packages/app-state/src/state.js";
 import { getAdapterInfo } from "../../../packages/adapters/src/adapter-info.js";
 
 const CLIENT_DISPLAY_NAMES = Object.freeze({
@@ -48,6 +49,10 @@ export function parseAiPetArgs(argv) {
     return parseStateArgs(rest);
   }
 
+  if (command === "hooks") {
+    return parseHooksArgs(rest);
+  }
+
   throw new Error(`Unsupported haya-pet command: ${command}`);
 }
 
@@ -68,6 +73,10 @@ export async function runAiPet(argv, dependencies = {}) {
 
   if (parsed.command === "state") {
     return runStateCommand(parsed, dependencies);
+  }
+
+  if (parsed.command === "hooks") {
+    return runHooksCommand(parsed, dependencies);
   }
 
   return runRunCommand(parsed, dependencies);
@@ -114,31 +123,63 @@ export async function runStartCommand(_parsed, dependencies = {}) {
 async function runRunCommand(parsed, dependencies) {
   const runGenericCommand = dependencies.runGenericCommand ?? defaultRunGenericCommand;
   const injectClaudeHooks = dependencies.injectClaudeHooks ?? defaultInjectClaudeHooks;
+  const watchClaudeTranscript = dependencies.watchClaudeTranscript ?? defaultWatchClaudeTranscript;
   const env = dependencies.env ?? process.env;
+  const now = dependencies.now ?? Date.now;
+  const cwd = dependencies.cwd ?? process.cwd();
   const messageSender = await createMessageSender(dependencies);
 
   const sessionId = dependencies.sessionId ?? `sess_${randomUUID()}`;
   let childArgs = parsed.childArgs;
   let childEnv = env;
   let cleanup = () => {};
+  let stopWatcher = () => {};
 
   // Claude Code: native passthrough is always the default (full terminal fidelity).
-  // Live-status hooks are OPT-IN (HAYA_PET_HOOKS=1) because injecting hooks makes
-  // Claude show a one-time "review hooks" trust prompt; we never want to disrupt
-  // the user's session by default. When enabled, inject a stable settings file so
-  // Claude reports live status via `haya-pet state` (no PTY, so Shift+Tab works).
-  if (parsed.clientId === "claude-code" && hooksEnabled(env)) {
+  // Live-status hooks are OPT-IN — persisted via `haya-pet hooks on`, or per-run via
+  // HAYA_PET_HOOKS=1 — because injecting hooks makes Claude show a one-time "review
+  // hooks" trust prompt; we never disrupt the user's session uninvited. When enabled,
+  // inject a stable settings file so Claude reports live status via `haya-pet state`
+  // (no PTY, so Shift+Tab works).
+  const claudeHooksOn =
+    parsed.clientId === "claude-code" && (await resolveClaudeHooksEnabled(env, dependencies));
+  if (claudeHooksOn) {
     const injected = injectClaudeHooks();
     childArgs = [...parsed.childArgs, "--settings", injected.settingsPath];
     childEnv = { ...env, HAYA_PET_SESSION_ID: sessionId };
     cleanup = injected.cleanup;
+
+    // Claude fires NO hook when the user manually denies a permission, so the
+    // pet would stay stuck on "waiting for approval". Tail the session transcript
+    // (ground truth) and clear to idle the moment a denial is recorded — never on
+    // a timer, so a genuinely-pending approval keeps alerting until it's resolved.
+    const watcher = watchClaudeTranscript({
+      cwd,
+      homeDir: dependencies.homeDir,
+      startedAt: now(),
+      onDenial: (event) => {
+        hookDebugLog(env, now, { source: "transcript", event: "denied", state: "idle", toolUseId: event?.toolUseId });
+        messageSender
+          .send({
+            type: "state",
+            sessionId,
+            state: "idle",
+            summary: "approval denied",
+            confidence: 0.9,
+            source: "client_log",
+            updatedAt: now()
+          })
+          .catch(() => {});
+      }
+    });
+    stopWatcher = watcher.stop;
   }
 
   try {
     return await runGenericCommand({
       command: parsed.childCommand,
       args: childArgs,
-      cwd: dependencies.cwd ?? process.cwd(),
+      cwd,
       clientId: parsed.clientId,
       clientDisplayName: CLIENT_DISPLAY_NAMES[parsed.clientId] ?? parsed.clientId,
       observe: parsed.observe,
@@ -150,14 +191,56 @@ async function runRunCommand(parsed, dependencies) {
       send: messageSender.send
     });
   } finally {
+    stopWatcher();
     cleanup();
     await messageSender.close();
   }
 }
 
-function hooksEnabled(env) {
-  const flag = env.HAYA_PET_HOOKS;
-  return flag === "1" || flag === "true";
+// Resolve whether Claude Code hooks should be injected for this run.
+// Precedence: HAYA_PET_NO_HOOKS forces off, HAYA_PET_HOOKS forces on (per-run
+// overrides), otherwise the persisted `haya-pet hooks on/off` preference.
+async function resolveClaudeHooksEnabled(env, dependencies) {
+  if (isTruthyFlag(env.HAYA_PET_NO_HOOKS)) {
+    return false;
+  }
+  if (isTruthyFlag(env.HAYA_PET_HOOKS)) {
+    return true;
+  }
+  try {
+    const state = await createConfigStateFile(dependencies).load();
+    return getClaudeHooksEnabled(state);
+  } catch {
+    return false;
+  }
+}
+
+function isTruthyFlag(value) {
+  return value === "1" || value === "true";
+}
+
+function createConfigStateFile(dependencies) {
+  const paths = getDefaultPaths({
+    platform: dependencies.platform,
+    env: dependencies.env,
+    homeDir: dependencies.homeDir
+  });
+  const createStateFile = dependencies.createStateFile ?? defaultCreateStateFile;
+  return createStateFile({ statePath: paths.statePath });
+}
+
+// Best-effort: mirror the reporter's HAYA_PET_HOOK_DEBUG log so transcript-driven
+// events (which don't go through `haya-pet state`) show up in the same trace.
+function hookDebugLog(env, now, entry) {
+  const target = env.HAYA_PET_HOOK_DEBUG;
+  if (!target) {
+    return;
+  }
+  try {
+    appendFileSync(target, `${JSON.stringify({ ts: now(), ...entry })}\n`);
+  } catch {
+    // diagnostics must never break the run
+  }
 }
 
 export async function runPetsCommand(parsed, dependencies = {}) {
@@ -217,6 +300,37 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
   const result = await runAiPet(argv, dependencies);
   process.exitCode = result.exitCode ?? 0;
   return result;
+}
+
+function parseHooksArgs(args) {
+  const [action = "status"] = args;
+  if (action === "on" || action === "off" || action === "status") {
+    return { command: "hooks", action };
+  }
+  throw new Error(`Unknown hooks action: ${action} (use on, off, or status)`);
+}
+
+// Persisted toggle for Claude Code live-status hooks (the convenient alternative
+// to setting HAYA_PET_HOOKS every shell).
+export async function runHooksCommand(parsed, dependencies = {}) {
+  const print = dependencies.print ?? defaultPrint;
+  const stateFile = createConfigStateFile(dependencies);
+  const state = await stateFile.load();
+
+  if (parsed.action === "status") {
+    const enabled = getClaudeHooksEnabled(state);
+    print(`Claude Code live-status hooks: ${enabled ? "on" : "off"}`);
+    return { command: "hooks", action: "status", enabled };
+  }
+
+  const enabled = parsed.action === "on";
+  await stateFile.save(setClaudeHooksEnabled(state, enabled));
+  print(
+    enabled
+      ? "Claude Code live-status hooks: on. The first `haya-pet run --client claude-code` asks Claude to review the hooks once — approve it."
+      : "Claude Code live-status hooks: off."
+  );
+  return { command: "hooks", action: parsed.action, enabled };
 }
 
 function parsePetsArgs(args) {

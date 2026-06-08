@@ -158,18 +158,21 @@ editing files / waiting for approval):
 
 ```bash
 # Claude Code — live status via per-session hooks, NO terminal-fidelity tradeoff.
-# First run shows a one-time Claude "review hooks" prompt you approve once.
-$env:HAYA_PET_HOOKS=1; haya-pet run --client claude-code -- claude   # PowerShell
-HAYA_PET_HOOKS=1 haya-pet run --client claude-code -- claude         # bash
+# Enable once (persisted); the first run shows a one-time Claude "review hooks"
+# prompt you approve once.
+haya-pet hooks on
+haya-pet run --client claude-code -- claude
+#   (per-run override without persisting: HAYA_PET_HOOKS=1 …, or $env:HAYA_PET_HOOKS=1 in PowerShell)
+#   (turn back off: haya-pet hooks off   ·   check: haya-pet hooks status)
 
 # Any client — coarse live status by watching output through a PTY.
 haya-pet run --observe --client codex -- codex
 ```
 
 > **Why opt-in?**
-> - **Hooks (`HAYA_PET_HOOKS=1`, Claude Code):** injecting hooks makes Claude show
->   a one-time *review hooks* trust prompt. We don't disrupt your session by
->   default; enable it once you're happy to approve the hooks.
+> - **Hooks (Claude Code):** injecting hooks makes Claude show a one-time
+>   *review hooks* trust prompt. We don't disrupt your session by default; turn it
+>   on once with `haya-pet hooks on` when you're happy to approve the hooks.
 > - **`--observe` (any client):** PTY observation infers status from output, but on
 >   Windows it routes input through ConPTY, which can break **Shift+Tab**, mouse
 >   scroll, and word-edit. Use it only for non-interactive runs. See
@@ -242,14 +245,14 @@ Full list (incl. repairing a broken Electron install): [docs/troubleshooting.md]
 
 | Client | Status | Support level |
 |---|---|---|
-| Generic CLI | ✅ | L1 process wrapper |
-| Codex | ✅ | L1 + L2 PTY observation |
-| Claude Code | ✅ | L1 + L2 PTY observation |
-| Antigravity | ✅ | L1 wrapper |
+| Generic CLI | ✅ | L1 process wrapper (+ L2 PTY via `--observe`) |
+| Codex | ✅ | L1 wrapper (+ L2 PTY via `--observe`) |
+| Claude Code | ✅ | L1 wrapper + **L4 live-status hooks** (opt-in `HAYA_PET_HOOKS=1`) |
+| Antigravity | ✅ | L1 wrapper (+ L2 PTY via `--observe`) |
 | Gemini CLI / Aider / others | 🔜 | via the generic adapter |
 
 (See [docs/architecture.md](docs/architecture.md) for the support tiers and the
-platform matrix.)
+platform matrix, and [CHANGELOG.md](CHANGELOG.md) for release notes.)
 
 ## Privacy
 
