@@ -141,4 +141,48 @@ helper. In progress:
 - Faithful PTY passthrough (see [known-issues.md](known-issues.md)).
 - Production overlay/IPC validation across all platforms.
 
+### Deferred: focus a session's terminal on bubble click
+
+Clicking a session bubble should raise/focus the terminal window running that
+session. Deferred because it can't be done as a clean cross-OS feature yet:
+
+- **Windows** — doable now: the helper already *locates* the window (HWND); add a
+  `focus` op that calls `SetForegroundWindow` (+ the usual `AllowSetForegroundWindow`
+  / attach-thread-input dance), then wire bubble click → IPC → helper.
+- **macOS** — needs an (unbuilt) Accessibility/window-list helper and a
+  user-granted Accessibility permission.
+- **Linux X11** — needs the (unbuilt) X11 helper (EWMH `_NET_ACTIVE_WINDOW`).
+- **Linux Wayland** — blocked by the compositor security model; no portable API to
+  focus another app's window.
+
+Implementation sketch when picked up: bubble `click` in `session-bubbles.js` →
+`haya-pet:focus-session` IPC with `sessionId` → main resolves `session.pid`
+(/`terminalPid`) → terminal helper `focus` op (per-OS), with a graceful no-op
+where unsupported.
+
+### Deferred: per-session token usage
+
+Show each session's token usage on its bubble. Feasible as an **L3 client-log
+adapter** (`source: "client_log"`) — and it's cross-OS, since only the log path
+differs by client, not by OS. There is no generic source: the process wrapper
+only sees terminal bytes, so usage must come from each client's own logs.
+
+- **Claude Code** — confirmed: per-turn `usage` (`input_tokens`, `output_tokens`,
+  `cache_creation_input_tokens`, `cache_read_input_tokens`) in
+  `~/.claude/projects/<encoded-cwd>/<session-uuid>.jsonl`. Clean JSONL to parse.
+- **Codex** — usage exists in its logs (`~/.codex/history.jsonl`, `sessions/`,
+  sqlite) but in a messier shape; needs a dedicated adapter + investigation.
+- **Generic / other clients** — no reliable source; the adapter should no-op.
+
+Implementation sketch when picked up: a per-client usage adapter tails the
+session's transcript (matched via the session's `cwd` → the newest `.jsonl` in
+that project dir), sums usage across turns, and emits an optional `usage` field
+(protocol addition) → `session-core` stores it → the bubble renders it
+(e.g. `↑ in / ↓ out`). Open questions: (1) which metric to surface — cache-read
+tokens are huge under prompt caching, so likely show output + input, with total
+context separate; (2) disambiguating multiple concurrent sessions in the same
+project dir (by start time / newest file). The JSONL parser is pure and
+TDD-friendly. Investigate non-Claude client adapters (Codex, etc.) as part of
+this.
+
 See [`../PROGRESS.md`](../PROGRESS.md) for the detailed log.
