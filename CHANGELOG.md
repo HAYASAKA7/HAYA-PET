@@ -20,7 +20,8 @@ All notable changes to Haya Pet are documented here. This project adheres to
 
 ### Internal
 - **CI on every code push** — a new GitHub Actions workflow lints and runs the
-  test suite (Ubuntu + Windows, Node 20/22) for any push or PR touching code.
+  test suite (Ubuntu + Windows + macOS, Node 20/22) for any push or PR touching
+  code.
 - **ESLint adopted** (`npm run lint`, flat config); the few existing findings
   were fixed with no behavior change.
 
