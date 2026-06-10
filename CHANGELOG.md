@@ -7,6 +7,15 @@ All notable changes to Haya Pet are documented here. This project adheres to
 > 0.2.0 npm publish; they are listed under 0.2.1, which is the first version that
 > ships them.
 
+## [0.2.3]
+
+### Added
+- **Drag-to-resize the pet.** Hovering the pet reveals a small grip at its
+  bottom-right corner; drag it to scale the pet between 0.5× and 2× (aspect
+  locked), double-click it to reset to 1×. The size persists across restarts,
+  like the pet position. Only the pet scales — session bubbles keep their
+  readable size and keep anchoring beside it.
+
 ## [0.2.2]
 
 ### Fixed

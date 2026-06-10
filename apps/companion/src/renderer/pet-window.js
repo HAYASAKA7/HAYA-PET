@@ -3,6 +3,7 @@
 // is the browser glue that draws frames and forwards pointer gestures.
 
 import { CELL_HEIGHT, CELL_WIDTH, getFrameRect } from "../../../../packages/pet-core/src/atlas.js";
+import { clampScale, DEFAULT_SCALE, resolveScaleFromDrag } from "../../../../packages/pet-core/src/pet-scale.js";
 import { getActionDurationMs, getFrameAt } from "../../../../packages/pet-core/src/animator.js";
 import {
   clearDragAction,
@@ -19,9 +20,14 @@ import { createInteractionController } from "./interaction-controller.js";
 import { createBubbleList } from "./session-bubbles.js";
 
 const bridge = window.aiPet;
+const petEl = document.getElementById("pet");
 const canvas = document.getElementById("pet-canvas");
+const gripEl = document.getElementById("pet-resize-grip");
 const ctx = canvas.getContext("2d");
 const panelEl = document.getElementById("bubbles");
+
+// The sprite's natural cell size; the canvas is this times the user's scale.
+const BASE_SIZE = Object.freeze({ width: CELL_WIDTH, height: CELL_HEIGHT });
 
 const controller = createInteractionController({
   // Click is deferred so a double-click never also fires a wave. Clicking the
@@ -50,6 +56,8 @@ let previousSessionStates = {};
 // The pet lives at this work-area-relative position inside the full-screen
 // overlay window; dragging moves it via CSS (the window never moves).
 let petLocal = { x: 0, y: 0 };
+// User-chosen pet scale (resize grip), persisted like the position.
+let petScale = DEFAULT_SCALE;
 // Linger bookkeeping so a finished session's bubble stays ~2s before vanishing.
 let lingerState = {};
 let lingerTimer;
@@ -58,6 +66,10 @@ let lastBubblesPayload = [];
 function setupPet(config) {
   if (config?.pet?.manifest) {
     manifest = config.pet.manifest;
+  }
+
+  if (config?.petScale !== undefined) {
+    applyPetScale(config.petScale);
   }
 
   if (config?.petPosition) {
@@ -75,9 +87,19 @@ function setupPet(config) {
 
 function applyPetPosition(pos) {
   petLocal = clampPetLocal(pos);
-  canvas.style.left = `${petLocal.x}px`;
-  canvas.style.top = `${petLocal.y}px`;
+  petEl.style.left = `${petLocal.x}px`;
+  petEl.style.top = `${petLocal.y}px`;
   placePanel();
+}
+
+// Resizes the canvas's pixel size, so each frame re-renders at the new scale
+// (no CSS stretching). Everything that reads canvas.width/height — drag
+// clamping, panel placement — adapts automatically.
+function applyPetScale(scale) {
+  petScale = clampScale(scale);
+  canvas.width = Math.round(BASE_SIZE.width * petScale);
+  canvas.height = Math.round(BASE_SIZE.height * petScale);
+  applyPetPosition(petLocal);
 }
 
 function clampPetLocal(pos) {
@@ -148,13 +170,13 @@ function draw(action, frameIndex) {
 function drawPlaceholder(action, frameIndex) {
   ctx.fillStyle = "rgba(110, 168, 254, 0.85)";
   ctx.beginPath();
-  ctx.roundRect ? ctx.roundRect(16, 16, CELL_WIDTH - 32, CELL_HEIGHT - 32, 16) : ctx.rect(16, 16, CELL_WIDTH - 32, CELL_HEIGHT - 32);
+  ctx.roundRect ? ctx.roundRect(16, 16, canvas.width - 32, canvas.height - 32, 16) : ctx.rect(16, 16, canvas.width - 32, canvas.height - 32);
   ctx.fill();
   ctx.fillStyle = "#001233";
   ctx.font = "14px system-ui";
   ctx.textAlign = "center";
-  ctx.fillText(action, CELL_WIDTH / 2, CELL_HEIGHT / 2);
-  ctx.fillText(`frame ${frameIndex}`, CELL_WIDTH / 2, CELL_HEIGHT / 2 + 20);
+  ctx.fillText(action, canvas.width / 2, canvas.height / 2);
+  ctx.fillText(`frame ${frameIndex}`, canvas.width / 2, canvas.height / 2 + 20);
 }
 
 function playOneShot(action) {
@@ -186,6 +208,50 @@ canvas.addEventListener("pointerup", (event) => {
     animationState = clearDragAction(animationState);
     bridge?.savePetPosition?.(petLocal);
   }
+});
+
+// --- Resize grip: drag to scale the pet, double-click to reset ---
+
+let resizeDrag; // { startScale, startPointer } while a grip drag is active
+
+gripEl.addEventListener("pointerdown", (event) => {
+  gripEl.setPointerCapture(event.pointerId);
+  gripEl.classList.add("active");
+  resizeDrag = {
+    startScale: petScale,
+    startPointer: { x: event.clientX, y: event.clientY }
+  };
+});
+
+gripEl.addEventListener("pointermove", (event) => {
+  if (!resizeDrag) {
+    return;
+  }
+  applyPetScale(resolveScaleFromDrag({
+    startScale: resizeDrag.startScale,
+    startPointer: resizeDrag.startPointer,
+    pointer: { x: event.clientX, y: event.clientY },
+    baseSize: BASE_SIZE
+  }));
+});
+
+gripEl.addEventListener("pointerup", () => {
+  if (!resizeDrag) {
+    return;
+  }
+  resizeDrag = undefined;
+  gripEl.classList.remove("active");
+  bridge?.savePetScale?.(petScale);
+});
+
+gripEl.addEventListener("pointercancel", () => {
+  resizeDrag = undefined;
+  gripEl.classList.remove("active");
+});
+
+gripEl.addEventListener("dblclick", () => {
+  applyPetScale(DEFAULT_SCALE);
+  bridge?.savePetScale?.(DEFAULT_SCALE);
 });
 
 // Re-clamp and re-place when the work area changes (display/resolution change).
@@ -247,6 +313,12 @@ let mouseIgnored;
 let lastPointer = { x: -1, y: -1 };
 
 function refreshMouseIgnore(x, y) {
+  // While the grip is captured, the pointer can briefly leave it (the pet only
+  // approximately tracks the diagonal); flipping click-through mid-drag would
+  // drop the pointerup, so hold interaction until the drag ends.
+  if (resizeDrag) {
+    return;
+  }
   if (!Number.isFinite(x) || !Number.isFinite(y)) {
     return;
   }

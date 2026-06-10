@@ -48,6 +48,8 @@ Haya Pet watches all of them and presents one ambient interface:
   stays click-through outside the pet and bubbles.
 - 🖱️ **Click / double-click / drag** — click folds/unfolds the bubbles, double-click
   expands them, drag moves the pet (position persists; bubbles stay on-screen).
+- 📏 **Resizable pet** — hover the pet and drag the corner grip to scale it
+  0.5×–2× for your screen; double-click the grip to reset. The size persists.
 - 🟢 **Live session bubbles** with per-session status icons and a folder toggle.
 - 🧠 **Normalized state model** — every client maps to a shared state vocabulary
   (`thinking`, `running_tool`, `waiting_approval`, `reviewing`, `failed`, …).
@@ -224,6 +226,8 @@ frames so everything still works.
 | Single click | waves + folds/unfolds the session bubbles |
 | Double click | jumps + expands the bubbles |
 | Drag | moves the pet; position is saved (bubbles follow, always on-screen) |
+| Drag corner grip | resizes the pet 0.5×–2× (grip appears on hover); size is saved |
+| Double-click grip | resets the pet to its normal size |
 | Tray icon → menu | show/hide, display mode, sessions, pets, **reset position**, **Quit** |
 
 ## Stop / exit the pet

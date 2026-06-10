@@ -30,16 +30,40 @@ body {
    its right. The window itself is large + transparent, and pointer events are
    forwarded so only the marked .interactive regions catch clicks — everything
    else passes through to the desktop (see pet-window.js). */
-#pet-canvas {
+#pet {
   position: absolute;
   left: 0;
   top: 0;
+}
+
+#pet-canvas {
+  display: block;
   image-rendering: pixelated;
   cursor: grab;
 }
 
 #pet-canvas:active {
   cursor: grabbing;
+}
+
+/* Resize grip: a small corner triangle that fades in while hovering the pet.
+   Dragging it scales the pet (aspect-locked); double-click resets to 1×. */
+.resize-grip {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  background: linear-gradient(135deg, transparent 50%, rgba(255, 255, 255, 0.75) 50%);
+  border-radius: 2px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+#pet:hover .resize-grip,
+.resize-grip.active {
+  opacity: 1;
 }
 
 /* Panel container is inert; its children opt back into pointer events so the

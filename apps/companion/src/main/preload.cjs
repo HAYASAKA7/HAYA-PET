@@ -5,6 +5,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("aiPet", {
   listSessions: () => ipcRenderer.invoke("haya-pet:list-sessions"),
   savePetPosition: (local) => ipcRenderer.invoke("haya-pet:save-pet-position", local),
+  savePetScale: (scale) => ipcRenderer.invoke("haya-pet:save-pet-scale", scale),
   setMouseIgnore: (ignore) => ipcRenderer.send("haya-pet:set-mouse-ignore", ignore),
   onConfig: (handler) => ipcRenderer.on("haya-pet:config", (_event, config) => handler(config)),
   onSessions: (handler) => ipcRenderer.on("haya-pet:sessions", (_event, payload) => handler(payload)),

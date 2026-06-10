@@ -7,8 +7,12 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <!-- Layer 1: the global pet overlay. -->
-    <canvas id="pet-canvas" class="interactive" width="192" height="208"></canvas>
+    <!-- Layer 1: the global pet overlay. The wrapper carries the position so the
+         hover-revealed resize grip travels with the canvas. -->
+    <div id="pet">
+      <canvas id="pet-canvas" class="interactive" width="192" height="208"></canvas>
+      <div id="pet-resize-grip" class="resize-grip interactive" title="Drag to resize · double-click to reset"></div>
+    </div>
 
     <!-- Layer 2: ongoing-session progress bubbles + folder toggle. -->
     <div id="bubbles" class="bubbles"></div>

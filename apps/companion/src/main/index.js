@@ -11,9 +11,10 @@ import { createProcessSnapshotLister } from "../../../../packages/platform-core/
 import { getDefaultPaths } from "../../../../packages/platform-core/src/paths.js";
 import { getPlatformCapabilities } from "../../../../packages/platform-core/src/capabilities.js";
 import { buildBubbleViews } from "../../../../packages/session-core/src/bubble-view.js";
+import { clampScale } from "../../../../packages/pet-core/src/pet-scale.js";
 import { buildPetWindowOptions, PET_SIZE } from "./window-options.js";
 import { resolveSavedPosition } from "./display-manager.js";
-import { setSelectedPet, updateGlobalPetPosition } from "./position-store.js";
+import { getPetScale, setPetScale, setSelectedPet, updateGlobalPetPosition } from "./position-store.js";
 import { buildTrayMenu } from "./tray-menu.js";
 import { createStateFile } from "./state-file.js";
 import { discoverPets } from "./pet-loader.js";
@@ -43,6 +44,8 @@ let runtime;
 let currentWorkArea;
 let currentDisplayId;
 let petLocal = { x: 0, y: 0 };
+// User-chosen pet scale (resize grip); the pet occupies PET_SIZE × petScale.
+let petScale = 1;
 let approvalWatch;
 
 // Electron singleton: a second launch forwards to the running instance.
@@ -58,6 +61,7 @@ if (!app.requestSingleInstanceLock()) {
 
 async function bootstrap() {
   positionState = await stateFile.load();
+  petScale = clampScale(getPetScale(positionState));
   pets = await discoverPets(paths.petSearchPaths);
 
   // Clients fire no event at the moment the user ACCEPTS a permission prompt
@@ -164,9 +168,17 @@ function createPetWindow() {
   });
 }
 
+function scaledPetSize() {
+  return {
+    width: Math.round(PET_SIZE.width * petScale),
+    height: Math.round(PET_SIZE.height * petScale)
+  };
+}
+
 function clampPetLocal(local) {
-  const maxX = Math.max(0, (currentWorkArea?.width ?? PET_SIZE.width) - PET_SIZE.width);
-  const maxY = Math.max(0, (currentWorkArea?.height ?? PET_SIZE.height) - PET_SIZE.height);
+  const size = scaledPetSize();
+  const maxX = Math.max(0, (currentWorkArea?.width ?? size.width) - size.width);
+  const maxY = Math.max(0, (currentWorkArea?.height ?? size.height) - size.height);
   return {
     x: Math.min(Math.max(local.x ?? 0, 0), maxX),
     y: Math.min(Math.max(local.y ?? 0, 0), maxY)
@@ -274,6 +286,15 @@ function registerRendererHandlers() {
     persistPetPosition();
     return petLocal;
   });
+
+  // Resize grip released (or double-clicked to reset): store the new scale and
+  // re-clamp the position so a grown pet never sticks out of the work area.
+  ipcMain.handle("haya-pet:save-pet-scale", async (_event, scale) => {
+    petScale = clampScale(scale);
+    petLocal = clampPetLocal(petLocal);
+    persistPetPosition();
+    return petScale;
+  });
 }
 
 function buildSessionPayload() {
@@ -302,7 +323,8 @@ function sendPetConfig() {
       ? { manifest: selected.manifest, spritesheetUrl: selected.spritesheetUrl }
       : undefined,
     overlayMode: capabilities.transparentOverlay === "required" ? "transparent-overlay" : "fallback-window",
-    petPosition: petLocal
+    petPosition: petLocal,
+    petScale
   });
 }
 
@@ -318,13 +340,15 @@ function persistPetPosition() {
 
   // Store the pet's absolute on-screen top-left so it can be restored on the
   // right display, mapping the in-window position back to screen coordinates.
-  positionState = updateGlobalPetPosition(positionState, {
+  // The persisted box is the *scaled* size, so display restore clamps correctly.
+  const size = scaledPetSize();
+  positionState = setPetScale(updateGlobalPetPosition(positionState, {
     x: currentWorkArea.x + petLocal.x,
     y: currentWorkArea.y + petLocal.y,
-    width: PET_SIZE.width,
-    height: PET_SIZE.height,
+    width: size.width,
+    height: size.height,
     displayId: currentDisplayId
-  });
+  }), petScale);
 
   // Debounce disk writes during drag (positionSaveDebounce, plan section 27).
   clearTimeout(persistTimer);
@@ -348,9 +372,10 @@ function focusPet() {
 function resetPosition() {
   // Drop the pet back to the bottom-right corner of its work area.
   const margin = 24;
+  const size = scaledPetSize();
   petLocal = clampPetLocal({
-    x: (currentWorkArea?.width ?? PET_SIZE.width) - PET_SIZE.width - margin,
-    y: (currentWorkArea?.height ?? PET_SIZE.height) - PET_SIZE.height - margin
+    x: (currentWorkArea?.width ?? size.width) - size.width - margin,
+    y: (currentWorkArea?.height ?? size.height) - size.height - margin
   });
   sendPetPosition();
   persistPetPosition();

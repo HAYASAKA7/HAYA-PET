@@ -66,6 +66,23 @@ export function getSelectedPetId(state) {
   return state?.globalPet?.selectedPetId;
 }
 
+// Pet display scale (resize grip). Range clamping lives in pet-core's
+// pet-scale module; this layer only stores and validates the raw value.
+export function setPetScale(state, scale) {
+  return {
+    ...state,
+    globalPet: {
+      ...state.globalPet,
+      scale
+    }
+  };
+}
+
+export function getPetScale(state) {
+  const scale = state?.globalPet?.scale;
+  return Number.isFinite(scale) ? scale : undefined;
+}
+
 export function serializePositionState(state) {
   return `${JSON.stringify(state, null, 2)}\n`;
 }
