@@ -1,6 +1,6 @@
 {
   "name": "@hayasaka7/haya-pet",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "type": "module",
   "description": "Generic AI CLI pet runtime foundation.",
   "license": "MIT",
@@ -17,6 +17,7 @@
     "haya-pet": "apps/cli/src/haya-pet.js"
   },
   "scripts": {
+    "lint": "eslint .",
     "test": "node test/run-tests.mjs"
   },
   "workspaces": [
@@ -31,5 +32,10 @@
   },
   "engines": {
     "node": ">=16.20.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.4.1",
+    "globals": "^17.6.0"
   }
 }

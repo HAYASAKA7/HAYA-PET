@@ -121,7 +121,7 @@ function renderComposer(bubble, replyMode, bridge) {
   return composer;
 }
 
-function renderControls(controlsPromise, bubble, bridge) {
+function renderControls(controlsPromise, _bubble, _bridge) {
   const wrap = document.createElement("div");
   wrap.className = "controls";
 

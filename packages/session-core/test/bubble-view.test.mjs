@@ -28,15 +28,40 @@ test("builds a bubble view model with label, summary, action, and elapsed", () =
   assert.equal(view.elapsedLabel, "1m 4s");
 });
 
-test("orders bubbles by session priority then recency", () => {
+test("stacks bubbles by connect time, newest on top, so they never reshuffle mid-session", () => {
   const sessions = [
-    { ...baseSession, sessionId: "sess_idle", state: "idle", updatedAt: 9_000 },
-    { ...baseSession, sessionId: "sess_wait", state: "waiting_approval", updatedAt: 4_000 },
-    { ...baseSession, sessionId: "sess_run", state: "running_tool", updatedAt: 8_000 }
+    { ...baseSession, sessionId: "sess_third", state: "waiting_approval", startedAt: 3_000, updatedAt: 4_000 },
+    { ...baseSession, sessionId: "sess_first", state: "idle", startedAt: 1_000, updatedAt: 9_000 },
+    { ...baseSession, sessionId: "sess_second", state: "running_tool", startedAt: 2_000, updatedAt: 8_000 }
   ];
 
   const views = buildBubbleViews(sessions, 10_000);
-  assert.deepEqual(views.map((view) => view.sessionId), ["sess_wait", "sess_run", "sess_idle"]);
+  assert.deepEqual(views.map((view) => view.sessionId), ["sess_third", "sess_second", "sess_first"]);
+});
+
+test("keeps bubble order stable when states and activity change", () => {
+  const before = [
+    { ...baseSession, sessionId: "sess_first", state: "running_tool", startedAt: 1_000, updatedAt: 2_000 },
+    { ...baseSession, sessionId: "sess_second", state: "idle", startedAt: 2_000, updatedAt: 2_500 }
+  ];
+  // Later, the second session becomes urgent and more recently active.
+  const after = [
+    { ...baseSession, sessionId: "sess_first", state: "idle", startedAt: 1_000, updatedAt: 3_000 },
+    { ...baseSession, sessionId: "sess_second", state: "waiting_approval", startedAt: 2_000, updatedAt: 9_000 }
+  ];
+
+  const order = (sessions) => buildBubbleViews(sessions, 10_000).map((view) => view.sessionId);
+  assert.deepEqual(order(before), order(after));
+});
+
+test("breaks connect-time ties by session id for a deterministic order", () => {
+  const sessions = [
+    { ...baseSession, sessionId: "sess_b", startedAt: 1_000 },
+    { ...baseSession, sessionId: "sess_a", startedAt: 1_000 }
+  ];
+
+  const views = buildBubbleViews(sessions, 10_000);
+  assert.deepEqual(views.map((view) => view.sessionId), ["sess_a", "sess_b"]);
 });
 
 test("marks the selected/pinned session", () => {

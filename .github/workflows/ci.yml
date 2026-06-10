@@ -1,0 +1,75 @@
+name: CI
+
+# Run code quality checks and the test suite on every push that touches code.
+on:
+  push:
+    paths:
+      - "**/*.js"
+      - "**/*.mjs"
+      - "**/*.cjs"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/ci.yml"
+  pull_request:
+    paths:
+      - "**/*.js"
+      - "**/*.mjs"
+      - "**/*.cjs"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/ci.yml"
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Code quality (ESLint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        # Electron's binary isn't needed for linting or tests; skip the ~150 MB
+        # download so CI is fast and isn't at the mercy of the Electron CDN.
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+  test:
+    name: Tests (Node ${{ matrix.node }} on ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Install dependencies
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+        run: npm ci
+
+      - name: Run the test suite
+        run: npm test

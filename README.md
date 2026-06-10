@@ -38,8 +38,9 @@ Haya Pet watches all of them and presents one ambient interface:
   draggable, and position-persistent like a real desktop companion.
 - **Session bubbles** — one compact bubble per active session showing client,
   project, the latest activity, and a status icon (a spinning *working* circle, a
-  green *done* check, a yellow *needs you*, or a red *failed* cross). A folder
-  button beside the pet folds them away.
+  green *done* check, a yellow *needs you*, or a red *failed* cross). Bubbles stack
+  by connect time — the newest session on top — so the stack never reshuffles while
+  work is in progress. A folder button beside the pet folds them away.
 
 ## Features
 

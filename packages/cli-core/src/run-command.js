@@ -256,7 +256,6 @@ async function runObservedCommand({
   registered = true;
   if (pendingState) {
     emitState(pendingState);
-    pendingState = undefined;
   }
 
   await sendProtocolMessage(send, { type: "heartbeat", sessionId, updatedAt: now() });

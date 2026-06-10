@@ -1,5 +1,4 @@
 import { mapAiStateToPetAction } from "../../pet-core/src/atlas.js";
-import { getSessionPriorityRank } from "./priority.js";
 import { buildSessionSummary, buildStatusLabel, formatElapsed } from "./summaries.js";
 
 // Collapses the full AI-state vocabulary into the four progress kinds the
@@ -53,17 +52,21 @@ export function buildBubbleViews(sessions, now = Date.now(), options = {}) {
   return sessions
     .filter(Boolean)
     .slice()
-    .sort(compareByPriority)
+    .sort(compareByConnectTime)
     .map((session) => buildBubbleView(session, now, options));
 }
 
-function compareByPriority(left, right) {
-  const rankDelta = getSessionPriorityRank(left) - getSessionPriorityRank(right);
-  if (rankDelta !== 0) {
-    return rankDelta;
+// Bubbles stack by connect time — the newest session on top, the first one at
+// the bottom — and never reshuffle while sessions are in progress. State
+// urgency only drives the collapsed-folder dot and the pet animation, not the
+// list order.
+function compareByConnectTime(left, right) {
+  const startedDelta = numeric(right.startedAt) - numeric(left.startedAt);
+  if (startedDelta !== 0) {
+    return startedDelta;
   }
 
-  return numeric(right.updatedAt) - numeric(left.updatedAt);
+  return String(left.sessionId).localeCompare(String(right.sessionId));
 }
 
 function safePetAction(state) {

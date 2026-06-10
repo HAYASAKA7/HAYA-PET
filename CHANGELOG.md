@@ -7,6 +7,23 @@ All notable changes to Haya Pet are documented here. This project adheres to
 > 0.2.0 npm publish; they are listed under 0.2.1, which is the first version that
 > ships them.
 
+## [0.2.2]
+
+### Fixed
+- **Session bubbles no longer reshuffle while sessions run.** Bubbles used to be
+  sorted by state urgency and latest activity, so every status change could move
+  a bubble up or down the stack mid-progress. They now stack by the time each
+  session **connected to the pet** — newest on top, first one at the bottom —
+  and that order stays fixed for the session's whole life. Urgency still shows
+  through each bubble's status icon, the collapsed-folder summary dot, and the
+  pet animation.
+
+### Internal
+- **CI on every code push** — a new GitHub Actions workflow lints and runs the
+  test suite (Ubuntu + Windows, Node 20/22) for any push or PR touching code.
+- **ESLint adopted** (`npm run lint`, flat config); the few existing findings
+  were fixed with no behavior change.
+
 ## [0.2.1]
 
 ### Added
