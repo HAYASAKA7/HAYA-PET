@@ -7,6 +7,13 @@ All notable changes to Haya Pet are documented here. This project adheres to
 > 0.2.0 npm publish; they are listed under 0.2.1, which is the first version that
 > ships them.
 
+## [0.2.4]
+
+### Fixed
+- Removed the non-functional **"Open Settings"** tray item (it had no handler).
+  A settings window is deferred until settings outgrow the tray; every current
+  setting already has a tray, CLI, or gesture home.
+
 ## [0.2.3]
 
 ### Added

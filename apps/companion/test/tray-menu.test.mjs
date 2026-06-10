@@ -13,9 +13,12 @@ const baseState = {
 test("includes the documented recovery controls", () => {
   const menu = buildTrayMenu(baseState);
   const ids = menu.map((item) => item.id);
-  for (const id of ["toggle_pet", "display_mode", "sessions", "pets", "attach_bubbles", "reset_position", "settings", "quit"]) {
+  for (const id of ["toggle_pet", "display_mode", "sessions", "pets", "attach_bubbles", "reset_position", "quit"]) {
     assert.ok(ids.includes(id), `missing ${id}`);
   }
+  // "Open Settings" is parked until a settings window exists (every current
+  // setting already has a tray/CLI/gesture home) — it must not be shown dead.
+  assert.ok(!ids.includes("settings"), "settings item should stay hidden until implemented");
 });
 
 test("toggles the pet label based on visibility", () => {

@@ -46,7 +46,11 @@ export function buildTrayMenu(state = {}) {
       checked: Boolean(state.attachBubblesToTerminals)
     },
     { id: "reset_position", label: "Reset Position" },
-    { id: "settings", label: "Open Settings" },
+    // Parked until a real settings window exists: every current setting already
+    // has a home (tray toggles, `haya-pet hooks`, drag/grip gestures), so the
+    // item would be a dead button. Re-enable once settings outgrow the tray
+    // (e.g. bubble text size, linger duration) and a handler is wired up.
+    // { id: "settings", label: "Open Settings" },
     { id: "separator", type: "separator" },
     { id: "quit", label: "Quit" }
   ];
