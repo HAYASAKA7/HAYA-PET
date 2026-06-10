@@ -4,7 +4,7 @@
 
 const EDIT_TOOLS = new Set(["apply_patch"]);
 
-export function parseCodexTranscriptLine(line) {
+export function parseCodexTranscriptLine(line, options = {}) {
   let entry;
   try {
     entry = JSON.parse(line);
@@ -14,6 +14,18 @@ export function parseCodexTranscriptLine(line) {
 
   if (entry?.type !== "response_item") {
     return undefined;
+  }
+
+  // Skip records from before the current session (used when replaying a
+  // freshly-discovered transcript so an earlier session's tool calls don't
+  // masquerade as live activity). Records without a parseable timestamp are
+  // kept — losing live events is worse than a rare stale one.
+  const minTimestampMs = options.minTimestampMs ?? 0;
+  if (minTimestampMs > 0 && typeof entry.timestamp === "string") {
+    const timestampMs = Date.parse(entry.timestamp);
+    if (Number.isFinite(timestampMs) && timestampMs < minTimestampMs) {
+      return undefined;
+    }
   }
 
   const payload = entry.payload;
@@ -46,13 +58,13 @@ export function parseCodexTranscriptLine(line) {
   return undefined;
 }
 
-export function parseCodexTranscriptLines(lines) {
+export function parseCodexTranscriptLines(lines, options = {}) {
   const events = [];
   for (const line of lines) {
     if (typeof line !== "string" || line.trim() === "") {
       continue;
     }
-    const event = parseCodexTranscriptLine(line);
+    const event = parseCodexTranscriptLine(line, options);
     if (event) {
       events.push(event);
     }

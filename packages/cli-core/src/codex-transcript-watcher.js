@@ -41,8 +41,11 @@ export function watchCodexTranscript(options = {}) {
         if (!transcriptPath) {
           return;
         }
-        offset = safeSize(transcriptPath);
-        return;
+        // Replay from the start rather than skipping to the end: Codex may
+        // have written the session's first tool calls before our first poll,
+        // and skipping them would lose the initial running-tool status. The
+        // per-record timestamp filter below keeps an earlier session's records
+        // (in a resumed/rotated file) from replaying as live activity.
       }
 
       const size = safeSize(transcriptPath);
@@ -60,7 +63,7 @@ export function watchCodexTranscript(options = {}) {
       const lines = (carry + chunk).split("\n");
       carry = lines.pop() ?? "";
 
-      for (const event of parseCodexTranscriptLines(lines)) {
+      for (const event of parseCodexTranscriptLines(lines, { minTimestampMs: startedAt })) {
         onToolEvent(event);
       }
     } catch {
