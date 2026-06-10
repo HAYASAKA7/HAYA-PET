@@ -443,6 +443,46 @@ test("persisted `hooks on` injects a Codex profile via -p at the front of args",
   assert.deepEqual(calls[0].args, ["-p", "haya-pet"], "profile flag goes at the front");
 });
 
+test("codex hooks also start a transcript watcher for tool activity", async () => {
+  const sent = [];
+  let fireToolEvent;
+  let stopped = false;
+
+  await runAiPet(["run", "--client", "codex", "--", "codex"], {
+    cwd: process.cwd(),
+    env: { USERPROFILE: "C:\\Users\\A" },
+    now: () => 42,
+    heartbeatIntervalMs: 10,
+    send: async (message) => sent.push(message),
+    createStateFile: hooksStateFile(true),
+    injectCodexHooks: () => ({ profileName: "haya-pet", cleanup: () => {} }),
+    watchCodexTranscript: ({ onToolEvent }) => {
+      fireToolEvent = onToolEvent;
+      return { stop: () => { stopped = true; } };
+    },
+    runGenericCommand: async (options) => {
+      fireToolEvent({
+        type: "tool_started",
+        toolCallId: "call_shell",
+        toolName: "shell_command",
+        state: "running_tool"
+      });
+      fireToolEvent({
+        type: "tool_finished",
+        toolCallId: "call_shell"
+      });
+      return { sessionId: options.sessionId, pid: 1, exitCode: 0 };
+    }
+  });
+
+  assert.ok(stopped, "transcript watcher is stopped after the wrapped command exits");
+  assert.deepEqual(
+    sent.filter((message) => message.type === "state" && message.source === "client_log").map((message) => message.state),
+    ["running_tool", "thinking"]
+  );
+  assert.ok(sent.every((message) => message.updatedAt === undefined || message.updatedAt === 42));
+});
+
 test("codex hooks are skipped (with a notice) when the user passes their own -p", async () => {
   const calls = [];
   let injected = 0;

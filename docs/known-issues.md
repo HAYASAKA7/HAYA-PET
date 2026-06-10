@@ -132,19 +132,23 @@ observation (`--observe`) or L1 lifecycle as the fallback. Current state:
     forwarded to hooks (session via `HAYA_PET_SESSION_ID`), and the reporter exits 0
     cleanly. Note `codex exec` can't be used to test this — it forces
     `approval_policy=never` + `sandbox=read`, a posture that disables hooks entirely.
-  - **Gap — `PreToolUse` does not fire** in 0.137 for tool calls, so `running_tool`
-    / `editing_files` never arrive yet (the entries are kept as harmless no-ops for
-    when it's fixed — [openai/codex#16732](https://github.com/openai/codex/issues/16732)).
-    `PermissionRequest` (the *waiting for approval* cue — the highest-value state)
-    is **unconfirmed**; it likely depends on an approval-required flow and needs a
-    dedicated test before the feature is worth wiring in.
+  - **`PreToolUse` does not fire** in 0.137 for tool calls (the entries are kept as
+    harmless no-ops for when it's fixed —
+    [openai/codex#16732](https://github.com/openai/codex/issues/16732)). Tool
+    activity is covered by an L3 Codex transcript watcher that tails
+    `~/.codex/sessions` JSONL: normal tools report `running_tool`, `apply_patch`
+    reports `editing_files`, and Haya Pet returns to `thinking` after active tool
+    calls drain. `PermissionRequest` (the *waiting for approval* cue — the
+    highest-value state) is **unconfirmed**; it likely depends on an
+    approval-required flow and needs a dedicated test before the feature is worth
+    wiring in.
 - **Antigravity (`agy`)** — **not yet implemented** (no hook injection). Uses
   `--observe` or L1 lifecycle. A Gemini-schema hook adapter is a planned follow-up.
 - **Generic / unknown** — no hooks; PTY observation (`--observe`) or L1 lifecycle.
 
-A future **L3 client-log adapter** (tailing e.g. `~/.codex/sessions` or
-Antigravity's `transcript.jsonl`) could provide activity without a PTY or hooks
-for the clients that lack a hook adapter.
+The Codex **L3 client-log adapter** now covers tool activity without a PTY or
+working `PreToolUse` hook. A similar adapter for Antigravity's `transcript.jsonl`
+remains a possible follow-up.
 
 ## Status sources, by fidelity
 
@@ -152,6 +156,7 @@ for the clients that lack a hook adapter.
 |---|---|---|
 | L1 | process wrapper | default; session lifecycle + exit code |
 | L4 | client hooks | opt-in via `haya-pet hooks on` (Claude Code full, Codex partial); reports through `haya-pet state …` |
+| L3 | client logs | Codex session JSONL watcher for tool activity; Claude denial recovery; future clients can add similar transcript adapters |
 | L2 | PTY output scraping | opt-in via `--observe` (terminal-fidelity tradeoff) |
 
 Native passthrough (L1) + opt-in hooks (L4) is the recommended setup for interactive

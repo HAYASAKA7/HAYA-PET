@@ -8,6 +8,7 @@ import { parseStateArgs, runStateCommand } from "../../../packages/cli-core/src/
 import { injectClaudeHooks as defaultInjectClaudeHooks } from "../../../packages/cli-core/src/claude-hook-injection.js";
 import { injectCodexHooks as defaultInjectCodexHooks } from "../../../packages/cli-core/src/codex-hook-injection.js";
 import { watchClaudeTranscript as defaultWatchClaudeTranscript } from "../../../packages/cli-core/src/claude-transcript-watcher.js";
+import { watchCodexTranscript as defaultWatchCodexTranscript } from "../../../packages/cli-core/src/codex-transcript-watcher.js";
 import { ensureCompanionConnection } from "../../../packages/cli-core/src/companion-launcher.js";
 import { createIpcClient as defaultCreateIpcClient } from "../../../packages/daemon-core/src/ipc-server.js";
 import { getDefaultPaths } from "../../../packages/platform-core/src/paths.js";
@@ -126,6 +127,7 @@ async function runRunCommand(parsed, dependencies) {
   const injectClaudeHooks = dependencies.injectClaudeHooks ?? defaultInjectClaudeHooks;
   const injectCodexHooks = dependencies.injectCodexHooks ?? defaultInjectCodexHooks;
   const watchClaudeTranscript = dependencies.watchClaudeTranscript ?? defaultWatchClaudeTranscript;
+  const watchCodexTranscript = dependencies.watchCodexTranscript ?? defaultWatchCodexTranscript;
   const print = dependencies.print ?? defaultPrint;
   const env = dependencies.env ?? process.env;
   const now = dependencies.now ?? Date.now;
@@ -183,7 +185,8 @@ async function runRunCommand(parsed, dependencies) {
   // Codex: no `--settings` equivalent, so inject a stable profile and add
   // `-p <name>` at the FRONT (a global flag must precede any subcommand). Codex
   // takes only one profile, so if the user already passes their own -p/--profile
-  // we skip injection and say so rather than clobber their choice.
+  // we skip injection and say so rather than clobber their choice. Codex
+  // PreToolUse is not reliable, so a transcript watcher supplies tool activity.
   const codexHooksOn = hooksOn && parsed.clientId === "codex";
   if (codexHooksOn) {
     if (hasProfileArg(parsed.childArgs)) {
@@ -195,6 +198,59 @@ async function runRunCommand(parsed, dependencies) {
       childArgs = ["-p", injected.profileName, ...parsed.childArgs];
       childEnv = { ...env, HAYA_PET_SESSION_ID: sessionId };
       cleanup = injected.cleanup;
+
+      const activeToolCalls = new Set();
+      const watcher = watchCodexTranscript({
+        homeDir: dependencies.homeDir,
+        sessionsRoot: dependencies.codexSessionsRoot,
+        startedAt: now(),
+        onToolEvent: (event) => {
+          hookDebugLog(env, now, {
+            source: "codex_transcript",
+            event: event.type,
+            toolCallId: event.toolCallId,
+            toolName: event.toolName,
+            state: event.state
+          });
+
+          if (event.type === "tool_started") {
+            activeToolCalls.add(event.toolCallId);
+            messageSender
+              .send({
+                type: "state",
+                sessionId,
+                state: event.state,
+                summary: event.toolName,
+                confidence: 0.85,
+                source: "client_log",
+                updatedAt: now()
+              })
+              .catch(() => {});
+            return;
+          }
+
+          if (event.type === "tool_finished") {
+            activeToolCalls.delete(event.toolCallId);
+            if (activeToolCalls.size === 0) {
+              messageSender
+                .send({
+                  type: "state",
+                  sessionId,
+                  state: "thinking",
+                  confidence: 0.85,
+                  source: "client_log",
+                  updatedAt: now()
+                })
+                .catch(() => {});
+            }
+          }
+        }
+      });
+      const previousStopWatcher = stopWatcher;
+      stopWatcher = () => {
+        watcher.stop();
+        previousStopWatcher();
+      };
     }
   }
 
