@@ -49,7 +49,7 @@ as each client allows:
 |---|---|---|
 | L1 | Process wrapper (lifecycle only) | session exists / exit code |
 | L2 | PTY output observation (`--observe`, opt-in) | activity-based working/idle |
-| L3 | Client logs / state files | client-specific (future) |
+| L3 | Client logs / state files / process tree | transcript watchers (Claude denial, Codex tools) + approval-accept detection |
 | L4 | Client hooks | richest — implemented for Claude Code (full) and Codex (partial) |
 
 The **default** is native passthrough (`stdio: "inherit"`) for full terminal
@@ -72,6 +72,16 @@ notice. Codex's hook command must be unquoted at the program position (it runs v
 (Rust regex) — see [known-issues.md](known-issues.md). Codex's L4 is **partial**:
 `PreToolUse`/`PermissionRequest` don't fire upstream yet, so only `thinking`/`idle`
 arrive today.
+
+Hooks alone can't see one moment: clients emit **no event when the user accepts a
+permission prompt** (denial and completion are observable; the accept click is
+not). The companion bridges it with **L3 process-tree observation**: while a
+session sits in `waiting_approval`, it polls the client's process subtree (the
+wrapper reported the pid at register), and when a new descendant process appears
+and persists across two polls — the approved command verifiably running — the
+session flips to `running_tool`. No timers: an unanswered prompt keeps warning
+until a real event resolves it (`approval-process-watcher.js`,
+`process-snapshot.js`; Windows/macOS/Linux listers).
 
 L2 is **activity-based**: any visible output → *working*; a short quiet window →
 *idle*; success/failure come from the real exit code, never from scraping output
@@ -107,8 +117,9 @@ packages/
   session-core/    registry, priority, summaries, bubble views, linger, pet-state
   task-core/       task status, events, store, approvals, replies, controls
   adapters/        client info, heuristics, capabilities, output observer, routing
-  daemon-core/     IPC server/transport, runtime bridge, singleton
-  platform-core/   platform, paths, capabilities
+  daemon-core/     IPC server/transport, runtime bridge, singleton,
+                   approval process watcher (waiting_approval -> running_tool)
+  platform-core/   platform, paths, capabilities, process snapshots (win/mac/linux)
 apps/
   cli/             haya-pet entrypoint + parser (run / start / stop / pets)
   companion/       Electron overlay app (main + renderer)

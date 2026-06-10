@@ -170,13 +170,20 @@ haya-pet run --client codex       -- codex
 haya-pet run --observe --client codex -- codex
 ```
 
-> **Codex hooks are partial today.** Codex shows `thinking` (working) and `idle`
-> (done); `running_tool` / `editing_files` / *waiting for approval* are wired but
-> don't arrive yet because of an upstream gap where Codex's `PreToolUse` /
-> `PermissionRequest` hooks don't fire ([openai/codex#16732](https://github.com/openai/codex/issues/16732)).
-> They'll start working automatically once Codex fixes it. Also: if you pass your
-> own `-p/--profile` to codex, haya-pet skips hook injection (Codex allows one
+> **Codex coverage.** Codex shows `thinking` (working) and `idle` (done) via hooks,
+> plus `running_tool` / `editing_files` via a session-transcript watcher.
+> *Waiting for approval* doesn't arrive yet because of an upstream gap where
+> Codex's `PermissionRequest` hook doesn't fire
+> ([openai/codex#16732](https://github.com/openai/codex/issues/16732)); it'll start
+> working automatically once Codex fixes it. Also: if you pass your own
+> `-p/--profile` to codex, haya-pet skips hook injection (Codex allows one
 > profile) and tells you. Claude Code has full coverage.
+
+> **Approval prompts resolve correctly** (Claude Code): deny → the pet returns to
+> idle the moment the denial lands in the session transcript; accept a command →
+> the pet flips to *working* a couple of seconds after the approved command
+> actually starts running (detected from the client's process tree — a real
+> event, never a timeout, so an unanswered prompt keeps warning until you decide).
 
 > **Why opt-in?**
 > - **Hooks (Claude Code / Codex):** injecting hooks makes the client show a

@@ -24,6 +24,44 @@ Issues found in live use, with their current status.
   `Notification` hook by type (`permission_prompt`→approval, `idle_prompt`→idle) so
   non-approval notifications no longer masquerade as approvals.
 
+## ✅ Resolved: pet stuck on "waiting for approval" after the user ACCEPTS
+
+- **Symptom:** The denial fix above covered "deny", but **accepting** a prompt
+  still left the pet on *waiting for approval* for the whole run of the approved
+  tool — often the user approves a command (build/test) and Claude immediately
+  starts working, with no further `PreToolUse`/`PostToolUse` until the tool
+  *finishes*. For a long command that was minutes of misleading "waiting"
+  (observed: 240 s in a `HAYA_PET_HOOK_DEBUG` trace).
+- **Root cause:** Claude Code emits **nothing at the moment of a manual accept** —
+  verified three ways: the official hooks lifecycle (`PreToolUse` → dialog →
+  `PermissionRequest` → … → `PostToolUse` only *after* the tool completes; there
+  is no "permission granted" event), a live hook trace, and the session
+  transcript (the `tool_use`/`tool_result`/hook records are flushed in one batch
+  at completion; nothing is written at approval time). So between *prompt shown*
+  and *tool finished*, outside observers get zero signal. Timers were rejected
+  again: flipping the state on a delay would hide a genuinely unanswered prompt.
+- **Fix:** **Process-tree observation** (`approval-process-watcher.js` +
+  `process-snapshot.js`). The wrapper already reports the client's `pid` on
+  register. While a session sits in `waiting_approval`, the companion polls the
+  client's process subtree (~1.5 s; only during the waiting window): when a
+  **new descendant process appears and is still alive on the next poll**, the
+  approved command is verifiably running → the session flips to `running_tool`
+  (summary `approved`, source `client_log`). The two-poll persistence filter
+  keeps short-lived blips (our own hook reporter, the user's hooks) from
+  triggering it; the subtree walk covers shim layers (`cmd.exe` → `claude.exe` →
+  command). Every transition is event-based: a real process appeared, the tool
+  finished (`PostToolUse`), or the user denied (transcript). If nothing happens,
+  the warning stays up — by design.
+- **Known limitations (accepted):** (1) In-process approvals (Edit/Write file
+  edits) spawn no OS process and aren't detected — but they complete in
+  milliseconds after approval, so `PostToolUse` resolves them near-instantly
+  anyway. (2) Detection lags the accept by ~2–3 s (two polls + snapshot cost).
+  (3) An unrelated *persistent* process spawned by the client mid-wait (e.g. an
+  MCP server starting) would read as an approval — considered acceptable since
+  the client is in fact actively doing something then. Cross-OS: Windows via a
+  PowerShell CIM snapshot, macOS via `ps`, Linux via `/proc` (macOS/Linux listers
+  are implemented but need live verification on real hardware).
+
 ## ✅ Resolved: Claude Code TUI accepted no keyboard input when hooks were injected
 
 - **Symptom:** With per-session hooks injected by default (`claude --settings
@@ -157,6 +195,7 @@ remains a possible follow-up.
 | L1 | process wrapper | default; session lifecycle + exit code |
 | L4 | client hooks | opt-in via `haya-pet hooks on` (Claude Code full, Codex partial); reports through `haya-pet state …` |
 | L3 | client logs | Codex session JSONL watcher for tool activity; Claude denial recovery; future clients can add similar transcript adapters |
+| L3 | process tree | approval-accept detection: a `waiting_approval` session flips to `running_tool` when the approved command verifiably starts under the client's pid |
 | L2 | PTY output scraping | opt-in via `--observe` (terminal-fidelity tradeoff) |
 
 Native passthrough (L1) + opt-in hooks (L4) is the recommended setup for interactive

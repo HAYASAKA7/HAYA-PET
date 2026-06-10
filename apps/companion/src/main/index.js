@@ -3,6 +3,11 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { createDaemonRuntime } from "../../../../packages/daemon-core/src/daemon-runtime.js";
 import { createIpcServer } from "../../../../packages/daemon-core/src/ipc-server.js";
+import {
+  createApprovalWatchCoordinator,
+  watchForApprovedProcess
+} from "../../../../packages/daemon-core/src/approval-process-watcher.js";
+import { createProcessSnapshotLister } from "../../../../packages/platform-core/src/process-snapshot.js";
 import { getDefaultPaths } from "../../../../packages/platform-core/src/paths.js";
 import { getPlatformCapabilities } from "../../../../packages/platform-core/src/capabilities.js";
 import { buildBubbleViews } from "../../../../packages/session-core/src/bubble-view.js";
@@ -38,6 +43,7 @@ let runtime;
 let currentWorkArea;
 let currentDisplayId;
 let petLocal = { x: 0, y: 0 };
+let approvalWatch;
 
 // Electron singleton: a second launch forwards to the running instance.
 if (!app.requestSingleInstanceLock()) {
@@ -54,8 +60,40 @@ async function bootstrap() {
   positionState = await stateFile.load();
   pets = await discoverPets(paths.petSearchPaths);
 
+  // Clients fire no event at the moment the user ACCEPTS a permission prompt
+  // (only denial/finish are observable), so a waiting_approval session would
+  // otherwise look stuck until its tool completed. The approval watcher flips
+  // it to running_tool when the approved command verifiably starts — a new
+  // persistent process under the client — and never on a timer, so a genuinely
+  // unanswered prompt keeps warning. Unsupported platforms simply skip this.
+  const processLister = createProcessSnapshotLister();
+  approvalWatch = processLister
+    ? createApprovalWatchCoordinator({
+        createWatcher: ({ rootPid, onApproved }) =>
+          watchForApprovedProcess({ rootPid, listProcesses: processLister, onApproved }),
+        onApproved: (sessionId) => {
+          try {
+            runtime.handleMessage({
+              type: "state",
+              sessionId,
+              state: "running_tool",
+              summary: "approved",
+              confidence: 0.6,
+              source: "client_log",
+              updatedAt: Date.now()
+            });
+          } catch {
+            // The session may have unregistered between detection and report.
+          }
+        }
+      })
+    : undefined;
+
   runtime = createDaemonRuntime({
-    onSessionChanged: () => pushSessions()
+    onSessionChanged: (session) => {
+      approvalWatch?.onSessionChanged(session);
+      pushSessions();
+    }
   });
 
   ipcServer = await createIpcServer({
@@ -85,6 +123,7 @@ async function bootstrap() {
 
   app.on("before-quit", async () => {
     clearInterval(sweep);
+    approvalWatch?.stopAll();
     await ipcServer?.close();
   });
 }
