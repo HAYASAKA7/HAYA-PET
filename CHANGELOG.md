@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Haya Pet are documented here. This project adheres to
+All notable changes to HAYA Pet are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
 > Note: some entries originally drafted under 0.2.0 actually landed *after* the

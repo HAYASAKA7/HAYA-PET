@@ -1,11 +1,11 @@
-# Haya Pet Companion (Electron overlay)
+# HAYA Pet Companion (Electron overlay)
 
 The desktop overlay app for the AI CLI pet runtime. It hosts the daemon IPC
 server, renders the global pet, and shows the session bubbles. (A reply/approval
 "task talk window" is scaffolded but parked — see below.)
 
 > Most users never launch this directly: `haya-pet run` auto-starts it. This doc
-> covers its internals. For installing/using Haya Pet, see the
+> covers its internals. For installing/using HAYA Pet, see the
 > [root README](../../README.md) and [docs/architecture.md](../../docs/architecture.md).
 
 ## Architecture

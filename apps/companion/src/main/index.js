@@ -15,7 +15,7 @@ import { clampScale } from "../../../../packages/pet-core/src/pet-scale.js";
 import { buildPetWindowOptions, PET_SIZE } from "./window-options.js";
 import { resolveSavedPosition } from "./display-manager.js";
 import { getPetScale, setPetScale, setSelectedPet, updateGlobalPetPosition } from "./position-store.js";
-import { buildTrayMenu } from "./tray-menu.js";
+import { buildTrayMenu, buildTrayTooltip } from "./tray-menu.js";
 import { createStateFile } from "./state-file.js";
 import { discoverPets } from "./pet-loader.js";
 
@@ -188,7 +188,7 @@ function clampPetLocal(local) {
 function createTray() {
   try {
     tray = new Tray(loadTrayIcon());
-    tray.setToolTip("Haya Pet — right-click to Quit");
+    tray.setToolTip(buildTrayTooltip());
   } catch (error) {
     // A failed tray must not take the whole app down; log and continue.
     console.error("tray unavailable:", error.message);

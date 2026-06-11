@@ -1,6 +1,6 @@
 # Publishing
 
-How Haya Pet is released to npm. Most users never need this — see the
+How HAYA Pet is released to npm. Most users never need this — see the
 [README](../README.md) to install and use it.
 
 ## Release flow

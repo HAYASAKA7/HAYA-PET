@@ -9,6 +9,10 @@ const DISPLAY_MODES = Object.freeze([
   { value: "hybrid", label: "Hybrid" }
 ]);
 
+export function buildTrayTooltip() {
+  return "HAYA Pet";
+}
+
 export function buildTrayMenu(state = {}) {
   const sessions = Array.isArray(state.sessions) ? state.sessions : [];
   const pets = Array.isArray(state.pets) ? state.pets : [];

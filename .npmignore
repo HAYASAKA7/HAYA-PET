@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+
+# Build and test output
+dist/
+build/
+coverage/
+.nyc_output/
+
+# .NET native helper build artifacts
+bin/
+obj/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local environment and app state
+.env
+.env.*
+!.env.example
+.ai-pet/
+.gax/
+.claude/
+
+# Local planning and agent workspace files
+PROGRESS.md
+docs/superpowers/
+general-ai-cli-pet-full-plan.md
+
+# Repository automation and editor files
+.github/
+.DS_Store
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp

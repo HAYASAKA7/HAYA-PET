@@ -1,4 +1,4 @@
-// Haya Pet — Windows window helper.
+// HAYA Pet - Windows window helper.
 //
 // Implements the line-delimited JSON helper protocol documented in
 // ../README.md. Reads one JSON request per line on stdin and writes one JSON

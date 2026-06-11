@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "../../../test/harness.mjs";
-import { buildTrayMenu } from "../src/main/tray-menu.js";
+import { buildTrayMenu, buildTrayTooltip } from "../src/main/tray-menu.js";
 
 const baseState = {
   petVisible: true,
@@ -45,4 +45,8 @@ test("lists active sessions or shows an empty placeholder", () => {
 test("reflects the attach-bubbles checkbox state", () => {
   assert.equal(buildTrayMenu(baseState).find((i) => i.id === "attach_bubbles").checked, true);
   assert.equal(buildTrayMenu({ ...baseState, attachBubblesToTerminals: false }).find((i) => i.id === "attach_bubbles").checked, false);
+});
+
+test("uses the HAYA Pet brand in the tray hover text", () => {
+  assert.equal(buildTrayTooltip(), "HAYA Pet");
 });

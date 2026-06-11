@@ -1,6 +1,6 @@
 # Architecture
 
-How Haya Pet is put together. For installing and using it, see the
+How HAYA Pet is put together. For installing and using it, see the
 [README](../README.md); this doc is for contributors and the curious.
 
 ## Pipeline

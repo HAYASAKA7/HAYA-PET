@@ -175,7 +175,7 @@ observation (`--observe`) or L1 lifecycle as the fallback. Current state:
     [openai/codex#16732](https://github.com/openai/codex/issues/16732)). Tool
     activity is covered by an L3 Codex transcript watcher that tails
     `~/.codex/sessions` JSONL: normal tools report `running_tool`, `apply_patch`
-    reports `editing_files`, and Haya Pet returns to `thinking` after active tool
+    reports `editing_files`, and HAYA Pet returns to `thinking` after active tool
     calls drain. `PermissionRequest` (the *waiting for approval* cue — the
     highest-value state) is **unconfirmed**; it likely depends on an
     approval-required flow and needs a dedicated test before the feature is worth
