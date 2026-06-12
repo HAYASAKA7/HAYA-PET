@@ -1,5 +1,6 @@
-import { app, BrowserWindow, ipcMain, Menu, nativeImage, screen, Tray } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, nativeImage, screen, shell, Tray } from "electron";
 import { fileURLToPath } from "node:url";
+import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createDaemonRuntime } from "../../../../packages/daemon-core/src/daemon-runtime.js";
 import { createIpcServer } from "../../../../packages/daemon-core/src/ipc-server.js";
@@ -18,6 +19,7 @@ import { getPetScale, setPetScale, setSelectedPet, updateGlobalPetPosition } fro
 import { buildTrayMenu, buildTrayTooltip } from "./tray-menu.js";
 import { createStateFile } from "./state-file.js";
 import { discoverPets } from "./pet-loader.js";
+import { checkForUpdate, UPDATE_PAGE_URL } from "../../../../packages/app-state/src/update-check.js";
 
 const STALE_SWEEP_INTERVAL_MS = 10_000;
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -47,6 +49,9 @@ let petLocal = { x: 0, y: 0 };
 // User-chosen pet scale (resize grip); the pet occupies PET_SIZE × petScale.
 let petScale = 1;
 let approvalWatch;
+// Set once the daily npm update check finds a newer version; surfaces as a
+// tray item (see tray-menu.js).
+let updateAvailable;
 
 // Electron singleton: a second launch forwards to the running instance.
 if (!app.requestSingleInstanceLock()) {
@@ -116,6 +121,9 @@ async function bootstrap() {
   createPetWindow();
   createTray();
   registerRendererHandlers();
+  // Best-effort and cached in state.json (shared with the CLI's check, so at
+  // most one registry request per day between them); never blocks startup.
+  void detectUpdate();
 
   const sweep = setInterval(() => {
     runtime.markStaleSessions(Date.now());
@@ -219,7 +227,8 @@ function refreshTrayMenu() {
     attachBubblesToTerminals: positionState.settings.attachBubblesToTerminals,
     selectedPetId: positionState.globalPet.selectedPetId,
     sessions,
-    pets: pets.map((pet) => ({ id: pet.manifest.id, name: pet.manifest.name }))
+    pets: pets.map((pet) => ({ id: pet.manifest.id, name: pet.manifest.name })),
+    updateAvailable
   }).map(toElectronMenuItem);
 
   tray.setContextMenu(Menu.buildFromTemplate(template));
@@ -246,6 +255,42 @@ function toElectronMenuItem(item) {
   return electronItem;
 }
 
+// Daily npm update check (shared cache with the CLI in state.json). On a hit,
+// the tray gains an "Update Available (x.y.z)" item; checkForUpdate itself
+// never throws, so this can run unawaited from bootstrap.
+async function detectUpdate() {
+  const update = await checkForUpdate({
+    currentVersion: readPackageVersion(),
+    // Every companion write flows through the in-memory positionState (load →
+    // mutate → save). Mirror that here: read the live copy, and on save merge
+    // only the cache key into whatever positionState is by then — a direct
+    // stateFile.save of the load-time snapshot could clobber a pet move made
+    // while the registry fetch was in flight.
+    stateFile: {
+      load: async () => positionState,
+      save: async (next) => {
+        positionState = { ...positionState, updateCheck: next.updateCheck };
+        return stateFile.save(positionState);
+      }
+    }
+  });
+  if (update) {
+    updateAvailable = update;
+    refreshTrayMenu();
+  }
+}
+
+// The published version lives in the ROOT package.json (the companion workspace
+// has its own, unpublished version number).
+function readPackageVersion() {
+  try {
+    const packagePath = join(__dirname, "..", "..", "..", "..", "package.json");
+    return JSON.parse(readFileSync(packagePath, "utf8")).version;
+  } catch {
+    return undefined;
+  }
+}
+
 function handleTrayClick(item) {
   switch (item.id) {
     case "toggle_pet":
@@ -256,6 +301,11 @@ function handleTrayClick(item) {
       break;
     case "quit":
       app.quit();
+      break;
+    case "update":
+      // Open the package page rather than running npm ourselves — installing
+      // is the user's call (and may need their node manager / sudo setup).
+      shell.openExternal(UPDATE_PAGE_URL);
       break;
     default:
       if (item.id?.startsWith("display_mode:")) {

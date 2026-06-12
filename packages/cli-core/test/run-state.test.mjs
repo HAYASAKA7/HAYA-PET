@@ -111,3 +111,44 @@ test("runStateCommand never throws when the daemon is unreachable", async () => 
   assert.equal(result.ok, false);
   assert.equal(result.reason, "no-daemon");
 });
+
+// The reporter is a child process the wrapped AI client may WAIT on at its own
+// shutdown (Codex /quit hung on its goodbye because a reporter sat forever on
+// a pipe await). Every IPC phase must therefore hit a hard deadline.
+test("runStateCommand times out instead of hanging when the connect never settles", async () => {
+  const result = await runStateCommand(
+    { command: "state", state: "thinking", summary: undefined, session: "s1" },
+    {
+      env: {},
+      ipcEndpoint: "test-endpoint",
+      reportDeadlineMs: 20,
+      createIpcClient: () => new Promise(() => {})
+    }
+  );
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, "timeout");
+});
+
+test("runStateCommand times out instead of hanging when send or close never settle", async () => {
+  const hangingSend = await runStateCommand(
+    { command: "state", state: "thinking", summary: undefined, session: "s1" },
+    {
+      env: {},
+      ipcEndpoint: "test-endpoint",
+      reportDeadlineMs: 20,
+      createIpcClient: async () => ({ send: () => new Promise(() => {}), close: async () => {} })
+    }
+  );
+  assert.equal(hangingSend.reason, "timeout");
+
+  const hangingClose = await runStateCommand(
+    { command: "state", state: "thinking", summary: undefined, session: "s1" },
+    {
+      env: {},
+      ipcEndpoint: "test-endpoint",
+      reportDeadlineMs: 20,
+      createIpcClient: async () => ({ send: async () => {}, close: () => new Promise(() => {}) })
+    }
+  );
+  assert.equal(hangingClose.reason, "timeout");
+});

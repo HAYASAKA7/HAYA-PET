@@ -32,7 +32,11 @@ export function createBubbleList(container, { collapsed = false, onRender } = {}
 
       if (!isCollapsed) {
         const list = document.createElement("div");
-        list.className = "bubble-list";
+        // The list itself must be pointer-active (not just the bubbles): with
+        // more than three sessions it scrolls, and the scrollbar + the gaps
+        // between bubbles belong to the list element — if it stayed
+        // click-through, wheel/drag there would fall through to the desktop.
+        list.className = "bubble-list interactive";
         for (const bubble of lastBubbles) {
           list.appendChild(renderBubble(bubble));
         }

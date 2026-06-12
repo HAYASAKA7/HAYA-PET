@@ -7,6 +7,40 @@ All notable changes to HAYA Pet are documented here. This project adheres to
 > 0.2.0 npm publish; they are listed under 0.2.1, which is the first version that
 > ships them.
 
+## [0.2.7]
+
+### Fixed
+- **Codex `/quit` no longer hangs after its goodbye.** The `haya-pet state`
+  hook reporter could hang forever on a never-settling IPC await (pipe connect,
+  write drain, or close) — and Codex awaits each hook child with a default
+  **600 s** timeout, so a hung turn-end `state idle` reporter both froze the
+  pet on "working" and made `/quit` sit on its token-usage goodbye for up to
+  10 minutes (Ctrl+C worked because it kills Codex without the wait, orphaning
+  the reporter — observed live). The reporter now races its whole IPC
+  interaction against a 2 s deadline and always exits; the wrapper's own
+  companion connection gets the same guard (5 s) so a wedged companion can
+  never hold the terminal after the wrapped CLI exits.
+
+### Added
+- **Update notice.** HAYA Pet now checks npm (at most once a day, cached in
+  `state.json`, shared between the CLI and the overlay) for a newer published
+  version. The CLI prints a one-line notice after a wrapped command exits (and
+  after `haya-pet start`), and the tray gains an **Update Available (x.y.z)**
+  item that opens the package page — the app never runs npm itself. The check
+  is best-effort (3 s timeout, silent on any failure, never blocks a run),
+  skipped when stdout isn't a terminal, and can be disabled with
+  `HAYA_PET_NO_UPDATE_CHECK=1`.
+
+### Changed
+- **The bubble panel shows at most three sessions at once.** Beyond the existing
+  height budget (the room between the folder button and the screen edge), the
+  list now also caps its viewport at the bottom of the third bubble — more
+  sessions are reached by scrolling, so a busy machine no longer grows a
+  screen-tall stack. The list surface itself (gaps between bubbles and the
+  scrollbar) is now pointer-active so wheel scrolling and scrollbar dragging
+  work anywhere on the open panel, and the scrollbar is a slim dark-theme thumb
+  instead of the stock bar.
+
 ## [0.2.6]
 
 ### Fixed

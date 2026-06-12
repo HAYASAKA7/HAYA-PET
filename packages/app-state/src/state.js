@@ -105,7 +105,10 @@ export function parsePositionState(text) {
       settings: {
         ...defaults.settings,
         ...(isPlainObject(parsed.settings) ? parsed.settings : {})
-      }
+      },
+      // Cached npm update-check result (see update-check.js) — must survive a
+      // load/save round-trip or every run would re-fetch from the registry.
+      ...(isPlainObject(parsed.updateCheck) ? { updateCheck: parsed.updateCheck } : {})
     };
   } catch {
     return defaults;

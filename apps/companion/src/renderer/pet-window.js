@@ -16,6 +16,7 @@ import {
 import { resolveCompanionPetState } from "../../../../packages/session-core/src/pet-state.js";
 import { resolveVisibleBubbles } from "../../../../packages/session-core/src/bubble-linger.js";
 import { resolvePanelPlacement } from "../main/panel-placement.js";
+import { resolveBubbleListMaxHeight } from "../main/bubble-list-viewport.js";
 import { createInteractionController } from "./interaction-controller.js";
 import { createBubbleList } from "./session-bubbles.js";
 
@@ -137,9 +138,11 @@ function placePanel() {
     const alignRight = placement.x + rect.width / 2 > workArea.width / 2;
     list.dataset.openDirection = openUp ? "up" : "down";
     list.dataset.openAlign = alignRight ? "right" : "left";
-    // Cap the height to the room actually available on the chosen side.
+    // Cap the height to the room actually available on the chosen side AND to
+    // three visible bubbles — more sessions are reached by scrolling the list.
     const room = openUp ? placement.y - margin : workArea.height - (placement.y + rect.height) - margin;
-    list.style.maxHeight = `${Math.max(96, Math.round(room))}px`;
+    const bubbleBottoms = Array.from(list.children, (child) => child.offsetTop + child.offsetHeight);
+    list.style.maxHeight = `${resolveBubbleListMaxHeight({ room, bubbleBottoms })}px`;
   }
 }
 

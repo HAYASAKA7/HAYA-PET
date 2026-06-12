@@ -48,6 +48,39 @@ Issues found in live use, with their current status.
   surfaces as turn-end *idle*). The TUI's passive `/approve` denial-override
   picker is not a blocking prompt.
 
+## ✅ Resolved: Codex `/quit` hung on its goodbye (and the pet kept showing "working")
+
+- **Symptom:** Exiting Codex with `/quit` printed the token-usage goodbye and the
+  `codex resume` hint, but the terminal never returned to a prompt and the pet
+  kept showing the session as ongoing. Ctrl+C exited fine. Only happened under
+  `haya-pet run`.
+- **Root cause (verified against codex-rs 0.139.0 source + a live orphaned
+  process):** the `haya-pet state` hook reporter had three **unbounded awaits**
+  in its IPC path — pipe connect, write drain, and `socket.end()` → `close` —
+  and the CLI entry's `process.exit()` only runs after the command resolves, so
+  one never-settling await made a reporter hang forever. Codex awaits every
+  hook child with a **default 600 s timeout**
+  (`hooks/engine/discovery.rs` `timeout_sec.unwrap_or(600)`;
+  `command_runner.rs` `timeout(…, child.wait_with_output())`), and `Stop` hooks
+  are awaited in turn completion (`core/hook_runtime.rs run_turn_stop_hooks`)
+  with the TUI exiting only after `ShutdownComplete`. So one hung turn-end
+  `state idle` reporter produced BOTH symptoms: the idle report never arrived
+  (pet stuck on "working"), and `/quit` waited up to 10 minutes on the hook
+  child after printing its goodbye. Ctrl+C kills Codex without that wait and
+  orphans the reporter — exactly what live process-tree monitoring showed (a
+  parentless reporter under the hook node version).
+- **Fix:** every IPC await now has a hard deadline (`cli-core/deadline.js`).
+  The reporter races its whole connect→send→close against **2 s** and exits
+  with `{ ok:false, reason:"timeout" }` on the deadline (one best-effort status
+  update lost; `HAYA_PET_HOOK_DEBUG` logs a `timeout: true` line for evidence).
+  The wrapper's companion connection gets the same guard (**5 s** per
+  send/close) so a wedged companion can never keep the wrapper — and the user's
+  terminal — alive after the wrapped CLI exits. Dead sessions still resolve via
+  the registry's stale/drop sweep, so a lost message self-heals.
+- **Note:** why a pipe await occasionally never settles (companion busy/wedged
+  at that moment) is not yet pinned down; the deadline makes it harmless and
+  the debug log will show `timeout: true` entries if it recurs.
+
 ## ✅ Resolved: pet stuck on "waiting for approval" after a manual denial
 
 - **Symptom:** With Claude Code hooks enabled, denying a permission prompt left the

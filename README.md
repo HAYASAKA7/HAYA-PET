@@ -248,6 +248,21 @@ exit code. Disable auto-start with `HAYA_PET_NO_AUTOSTART=1`.
 | Electron | Installed as a runtime dependency. |
 | node-pty | Optional; used only for `--observe`. |
 
+## Updates
+
+HAYA Pet checks npm for a newer published version at most once a day (cached in
+`state.json`). When one exists, the CLI prints a one-line notice after your
+wrapped command exits, and the tray shows **Update Available (x.y.z)** — clicking
+it opens the package page. Updating is always your action:
+
+```bash
+npm install -g @hayasaka7/haya-pet
+```
+
+The check is best-effort (3s timeout, silent on failure, never blocks a run),
+skipped when output is piped, and fully disabled with
+`HAYA_PET_NO_UPDATE_CHECK=1`.
+
 ## Troubleshooting
 
 | Symptom | Fix |
@@ -265,7 +280,10 @@ repairing a broken Electron install.
 
 HAYA Pet is local-only by default. It does not upload prompts, files,
 screenshots, or session logs. The overlay stores only local state needed for
-pet selection, position, size, and short derived status summaries.
+pet selection, position, size, and short derived status summaries. The single
+outbound request it ever makes is the daily npm version check (a standard
+HTTPS request to `registry.npmjs.org` that sends no session data); disable it
+with `HAYA_PET_NO_UPDATE_CHECK=1`.
 
 ## Documentation
 

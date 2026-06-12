@@ -275,6 +275,74 @@ test("HAYA_PET_NO_AUTOSTART disables auto-starting the companion", async () => {
   assert.equal(launched, 0);
 });
 
+test("run prints an update notice only after the wrapped command exits", async () => {
+  const order = [];
+
+  await runAiPet(["run", "--client", "generic", "--", "node", "-v"], {
+    env: { USERPROFILE: "C:\\Users\\A" },
+    heartbeatIntervalMs: 10,
+    send: async () => {},
+    print: (line) => order.push(line),
+    checkForUpdate: async () => ({ currentVersion: "0.2.7", latestVersion: "9.9.9" }),
+    runGenericCommand: async (options) => {
+      order.push("child-finished");
+      return { sessionId: options.sessionId, pid: 1, exitCode: 0 };
+    }
+  });
+
+  const noticeIndex = order.findIndex((entry) => entry.includes("update available"));
+  assert.ok(noticeIndex !== -1, "notice printed");
+  assert.ok(order[noticeIndex].includes("0.2.7 → 9.9.9"), "notice names both versions");
+  assert.ok(order[noticeIndex].includes("npm install -g @hayasaka7/haya-pet"), "notice gives the command");
+  assert.ok(noticeIndex > order.indexOf("child-finished"), "notice comes after the child exits");
+});
+
+test("run prints no update notice when the check finds nothing", async () => {
+  const lines = [];
+
+  await runAiPet(["run", "--client", "generic", "--", "node", "-v"], {
+    env: { USERPROFILE: "C:\\Users\\A" },
+    heartbeatIntervalMs: 10,
+    send: async () => {},
+    print: (line) => lines.push(line),
+    checkForUpdate: async () => undefined,
+    runGenericCommand: async (options) => ({ sessionId: options.sessionId, pid: 1, exitCode: 0 })
+  });
+
+  assert.ok(!lines.some((line) => line.includes("update available")));
+});
+
+test("start prints an update notice after its status line", async () => {
+  const lines = [];
+
+  await runAiPet(["start"], {
+    env: { USERPROFILE: "C:\\Users\\A" },
+    createIpcClient: async () => ({ send: async () => {}, close: async () => {} }),
+    launchCompanion: async () => {},
+    print: (line) => lines.push(line),
+    checkForUpdate: async () => ({ currentVersion: "0.2.7", latestVersion: "9.9.9" })
+  });
+
+  const noticeIndex = lines.findIndex((line) => line.includes("update available"));
+  assert.ok(noticeIndex !== -1, "notice printed");
+  assert.ok(noticeIndex > lines.findIndex((line) => line.includes("already running")));
+});
+
+test("run returns even when the companion connection hangs on close", async () => {
+  const result = await runAiPet(["run", "--client", "generic", "--", "node", "-v"], {
+    env: { USERPROFILE: "C:\\Users\\A" },
+    heartbeatIntervalMs: 10,
+    senderDeadlineMs: 20,
+    createIpcClient: async () => ({
+      send: async () => {},
+      close: () => new Promise(() => {})
+    }),
+    runGenericCommand: async (options) => ({ sessionId: options.sessionId, pid: 1, exitCode: 0 })
+  });
+
+  assert.equal(result.exitCode, 0);
+});
+
 test("parses the start command and reports when already running", async () => {
   assert.deepEqual(parseAiPetArgs(["start"]), { command: "start" });
 

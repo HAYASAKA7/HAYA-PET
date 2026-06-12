@@ -25,7 +25,9 @@ deferred problems with known root causes.
 | Pet stayed on **waiting for approval** after I denied a tool | Fixed — Claude fires no hook on a manual denial, so the wrapper tails the session transcript and clears to **idle** when the denial is recorded. A genuinely-pending approval (you haven't decided yet) correctly keeps alerting — there's no timer. |
 | Pet stayed on **waiting for approval** after I *approved* a command | Fixed — Claude also fires no hook at the accept moment, so the companion watches the client's process tree while a session waits: when the approved command verifiably starts (a new persistent process under the client), the pet flips to **working**. Expect a ~2–3s lag after your click. File-edit approvals (no process) resolve at completion, which is near-instant. |
 | Want to see which status events fire | Set `HAYA_PET_HOOK_DEBUG=<file.jsonl>` before `haya-pet run`; each hook- and transcript-sourced status appends one JSON line (timestamp, state, and source/event). |
+| Don't want the update check / notice | Set `HAYA_PET_NO_UPDATE_CHECK=1`. The check is a daily, cached HTTPS request to the npm registry (no session data); it is already skipped automatically when output is piped. |
 | Pet stays **idle** after force-quitting a CLI | The wrapper marks the session stale ~15s after the heartbeat stops, then drops it. Exiting normally (incl. Ctrl+C) reports **exited** immediately. |
+| **Codex `/quit`** printed its goodbye but the terminal hung (pet stuck on "working") | Fixed — a hook reporter could hang on a pipe await and Codex waits up to 600s for hook children at shutdown. Reporters now hard-deadline at 2s. Update to the latest version. |
 | Ctrl+C doesn't exit the CLI cleanly under `haya-pet run` | Fixed — the wrapper no longer dies on Ctrl+C; the signal reaches the CLI, which exits, and the pet shows the result. |
 | `ENOENT … electron\path.txt` | Electron's install extraction was interrupted — see below. |
 

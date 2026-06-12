@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-import { realpathSync, appendFileSync } from "node:fs";
+import { realpathSync, appendFileSync, readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runGenericCommand as defaultRunGenericCommand } from "../../../packages/cli-core/src/run-command.js";
 import { parseStateArgs, runStateCommand } from "../../../packages/cli-core/src/run-state.js";
@@ -16,6 +17,11 @@ import { getDefaultPaths } from "../../../packages/platform-core/src/paths.js";
 import { discoverPets as defaultDiscoverPets } from "../../../packages/pet-core/src/discovery.js";
 import { createStateFile as defaultCreateStateFile } from "../../../packages/app-state/src/state-file.js";
 import { getSelectedPetId, setSelectedPet, getHooksEnabled, setHooksEnabled } from "../../../packages/app-state/src/state.js";
+import { checkForUpdate, UPDATE_COMMAND } from "../../../packages/app-state/src/update-check.js";
+import { raceDeadline } from "../../../packages/cli-core/src/deadline.js";
+
+// Ceiling for wrapper→companion IPC awaits (see createMessageSender).
+const SENDER_DEADLINE_MS = 5000;
 import { getAdapterInfo } from "../../../packages/adapters/src/adapter-info.js";
 
 const CLIENT_DISPLAY_NAMES = Object.freeze({
@@ -105,6 +111,13 @@ export async function runStopCommand(_parsed, dependencies = {}) {
 // Explicitly start the companion overlay (so users never need `npm start`).
 export async function runStartCommand(_parsed, dependencies = {}) {
   const print = dependencies.print ?? defaultPrint;
+  const updateCheck = startUpdateCheck(dependencies);
+  const result = await startCompanionAndReport(dependencies, print);
+  await reportUpdateNotice(updateCheck, print);
+  return result;
+}
+
+async function startCompanionAndReport(dependencies, print) {
   const { client, started, error, timedOut } = await connectCompanion(dependencies, true);
 
   if (client) {
@@ -123,6 +136,51 @@ export async function runStartCommand(_parsed, dependencies = {}) {
   return { command: "start", ok: false, started: false };
 }
 
+// Kick off the (cached, best-effort) npm update check without blocking the
+// actual work; callers await the promise only when they are about to print.
+// Nothing here may ever break the run — even resolving the state path can
+// throw (no HOME/USERPROFILE), which simply means "no check".
+function startUpdateCheck(dependencies) {
+  try {
+    const check = dependencies.checkForUpdate ?? defaultCheckForUpdate;
+    return check({
+      currentVersion: dependencies.currentVersion ?? readOwnVersion(),
+      stateFile: createConfigStateFile(dependencies),
+      env: dependencies.env ?? process.env,
+      now: dependencies.now ?? Date.now
+    });
+  } catch {
+    return Promise.resolve(undefined);
+  }
+}
+
+// Default update check runs only on an interactive terminal: piped/CI output
+// should not be nagged (and nothing non-interactive should touch the network).
+function defaultCheckForUpdate(options) {
+  if (!process.stdout.isTTY) {
+    return Promise.resolve(undefined);
+  }
+  return checkForUpdate(options);
+}
+
+async function reportUpdateNotice(updateCheck, print) {
+  const update = await updateCheck;
+  if (update) {
+    print(
+      `haya-pet: update available — ${update.currentVersion} → ${update.latestVersion}. Run: ${UPDATE_COMMAND}`
+    );
+  }
+}
+
+function readOwnVersion() {
+  try {
+    const packagePath = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "package.json");
+    return JSON.parse(readFileSync(packagePath, "utf8")).version;
+  } catch {
+    return undefined;
+  }
+}
+
 async function runRunCommand(parsed, dependencies) {
   const runGenericCommand = dependencies.runGenericCommand ?? defaultRunGenericCommand;
   const injectClaudeHooks = dependencies.injectClaudeHooks ?? defaultInjectClaudeHooks;
@@ -136,6 +194,9 @@ async function runRunCommand(parsed, dependencies) {
   const now = dependencies.now ?? Date.now;
   const cwd = dependencies.cwd ?? process.cwd();
   const messageSender = await createMessageSender(dependencies);
+  // Concurrent with the wrapped command; the result is printed after it exits
+  // (interactive TUIs clear the screen, so a pre-launch notice would be lost).
+  const updateCheck = startUpdateCheck(dependencies);
 
   const sessionId = dependencies.sessionId ?? `sess_${randomUUID()}`;
   let childArgs = parsed.childArgs;
@@ -302,7 +363,7 @@ async function runRunCommand(parsed, dependencies) {
   }
 
   try {
-    return await runGenericCommand({
+    const result = await runGenericCommand({
       command: parsed.childCommand,
       args: childArgs,
       cwd,
@@ -316,6 +377,8 @@ async function runRunCommand(parsed, dependencies) {
       stdio: dependencies.stdio,
       send: messageSender.send
     });
+    await reportUpdateNotice(updateCheck, print);
+    return result;
   } finally {
     stopWatcher();
     cleanup();
@@ -609,9 +672,14 @@ async function createMessageSender(dependencies) {
     process.stderr.write("haya-pet: started the companion overlay.\n");
   }
 
+  // Deadline every IPC await: if the companion wedges, a hanging send/close
+  // would keep THIS process alive after the wrapped CLI exits — leaving the
+  // user's terminal without a prompt. Losing a status message to the deadline
+  // is fine (the registry stales-out dead sessions); losing the terminal isn't.
+  const deadlineMs = dependencies.senderDeadlineMs ?? SENDER_DEADLINE_MS;
   return {
-    send: (message) => client.send(message),
-    close: () => client.close()
+    send: (message) => raceDeadline(client.send(message), deadlineMs),
+    close: () => raceDeadline(client.close(), deadlineMs)
   };
 }
 

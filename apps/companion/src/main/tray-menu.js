@@ -55,6 +55,11 @@ export function buildTrayMenu(state = {}) {
     // item would be a dead button. Re-enable once settings outgrow the tray
     // (e.g. bubble text size, linger duration) and a handler is wired up.
     // { id: "settings", label: "Open Settings" },
+    // Only present when the daily npm update check found a newer version;
+    // clicking it opens the package page (the app never runs npm itself).
+    ...(state.updateAvailable?.latestVersion
+      ? [{ id: "update", label: `Update Available (${state.updateAvailable.latestVersion})` }]
+      : []),
     { id: "separator", type: "separator" },
     { id: "quit", label: "Quit" }
   ];

@@ -5,6 +5,14 @@ import { appendFileSync } from "node:fs";
 import { createIpcClient as defaultCreateIpcClient } from "../../daemon-core/src/ipc-server.js";
 import { getDefaultPaths } from "../../platform-core/src/paths.js";
 import { isAiClientState } from "../../protocol/src/messages.js";
+import { DEADLINE, raceDeadline } from "./deadline.js";
+
+// Hard ceiling on the whole connect→send→close interaction. The reporter is a
+// child process of the wrapped AI client, and the client may wait for its hook
+// children at shutdown (observed: Codex /quit stuck on its goodbye while an
+// orphaned reporter hung forever on a pipe await). Hitting the deadline only
+// loses one best-effort status update; hanging loses the user's terminal.
+const REPORT_DEADLINE_MS = 2000;
 
 // Best-effort diagnostic: when HAYA_PET_HOOK_DEBUG points at a file, append one
 // JSONL line per reporter invocation so we can see the exact sequence of states
@@ -62,6 +70,7 @@ export async function runStateCommand(parsed, dependencies = {}) {
   }
 
   const createIpcClient = dependencies.createIpcClient ?? defaultCreateIpcClient;
+  const deadlineMs = dependencies.reportDeadlineMs ?? REPORT_DEADLINE_MS;
 
   try {
     const endpoint = dependencies.ipcEndpoint ?? getDefaultPaths({
@@ -69,17 +78,28 @@ export async function runStateCommand(parsed, dependencies = {}) {
       env,
       homeDir: dependencies.homeDir
     }).ipcEndpoint;
-    const client = await createIpcClient({ endpoint });
-    await client.send({
-      type: "state",
-      sessionId,
-      state: parsed.state,
-      summary: parsed.summary,
-      confidence: 0.9,
-      source: "official_plugin",
-      updatedAt: now()
-    });
-    await client.close();
+
+    const outcome = await raceDeadline(
+      (async () => {
+        const client = await createIpcClient({ endpoint });
+        await client.send({
+          type: "state",
+          sessionId,
+          state: parsed.state,
+          summary: parsed.summary,
+          confidence: 0.9,
+          source: "official_plugin",
+          updatedAt: now()
+        });
+        await client.close();
+      })(),
+      deadlineMs
+    );
+
+    if (outcome === DEADLINE) {
+      debugLog(env, now, { state: parsed.state, sessionId, timeout: true });
+      return { command: "state", ok: false, reason: "timeout" };
+    }
     return { command: "state", ok: true };
   } catch {
     return { command: "state", ok: false, reason: "no-daemon" };

@@ -149,6 +149,25 @@ body {
   pointer-events: auto;
 }
 
+/* Scrolling is by design (at most three bubbles are visible at once), so give
+   the list a slim thumb that fits the dark pills instead of the stock bar. */
+.bubble-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.bubble-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.bubble-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 3px;
+}
+
+.bubble-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
 .bubble-list[data-open-direction="down"] { top: calc(100% + 6px); }
 .bubble-list[data-open-direction="up"] { bottom: calc(100% + 6px); }
 .bubble-list[data-open-align="left"] { left: 0; right: auto; }

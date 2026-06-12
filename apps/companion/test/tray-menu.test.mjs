@@ -47,6 +47,16 @@ test("reflects the attach-bubbles checkbox state", () => {
   assert.equal(buildTrayMenu({ ...baseState, attachBubblesToTerminals: false }).find((i) => i.id === "attach_bubbles").checked, false);
 });
 
+test("shows the update item only when a newer version is known", () => {
+  const withoutUpdate = buildTrayMenu(baseState);
+  assert.ok(!withoutUpdate.some((i) => i.id === "update"), "no update item by default");
+
+  const withUpdate = buildTrayMenu({ ...baseState, updateAvailable: { latestVersion: "9.9.9" } });
+  const item = withUpdate.find((i) => i.id === "update");
+  assert.ok(item, "update item appears when an update is known");
+  assert.ok(item.label.includes("9.9.9"), "label names the new version");
+});
+
 test("uses the HAYA Pet brand in the tray hover text", () => {
   assert.equal(buildTrayTooltip(), "HAYA Pet");
 });
