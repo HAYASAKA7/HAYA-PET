@@ -9,6 +9,7 @@ import { injectClaudeHooks as defaultInjectClaudeHooks } from "../../../packages
 import { injectCodexHooks as defaultInjectCodexHooks } from "../../../packages/cli-core/src/codex-hook-injection.js";
 import { watchClaudeTranscript as defaultWatchClaudeTranscript } from "../../../packages/cli-core/src/claude-transcript-watcher.js";
 import { watchCodexTranscript as defaultWatchCodexTranscript } from "../../../packages/cli-core/src/codex-transcript-watcher.js";
+import { watchCodexGuardianReviews as defaultWatchCodexGuardianReviews } from "../../../packages/cli-core/src/codex-guardian-watcher.js";
 import { ensureCompanionConnection } from "../../../packages/cli-core/src/companion-launcher.js";
 import { createIpcClient as defaultCreateIpcClient } from "../../../packages/daemon-core/src/ipc-server.js";
 import { getDefaultPaths } from "../../../packages/platform-core/src/paths.js";
@@ -128,6 +129,8 @@ async function runRunCommand(parsed, dependencies) {
   const injectCodexHooks = dependencies.injectCodexHooks ?? defaultInjectCodexHooks;
   const watchClaudeTranscript = dependencies.watchClaudeTranscript ?? defaultWatchClaudeTranscript;
   const watchCodexTranscript = dependencies.watchCodexTranscript ?? defaultWatchCodexTranscript;
+  const watchCodexGuardianReviews =
+    dependencies.watchCodexGuardianReviews ?? defaultWatchCodexGuardianReviews;
   const print = dependencies.print ?? defaultPrint;
   const env = dependencies.env ?? process.env;
   const now = dependencies.now ?? Date.now;
@@ -251,6 +254,50 @@ async function runRunCommand(parsed, dependencies) {
         watcher.stop();
         previousStopWatcher();
       };
+
+      // With "Approve for me" (approvals_reviewer=auto_review, legacy alias
+      // guardian_subagent), Codex routes approval requests to a guardian
+      // subagent and never shows the human approval UI — yet the
+      // PermissionRequest hook still fires at request creation, which used to
+      // pin the pet on a false "waiting for approval" for the whole review.
+      // The guardian's own rollout is the only observable record of the
+      // review, so tail it: a review turn starting proves the agent is
+      // reviewing; an "allow" verdict proves the action proceeds; a "deny"
+      // verdict goes back to the model, which keeps working. An unreadable
+      // verdict reports nothing — a pending cue is never cleared on a guess.
+      const guardianWatcher = watchCodexGuardianReviews({
+        homeDir: dependencies.homeDir,
+        sessionsRoot: dependencies.codexSessionsRoot,
+        startedAt: now(),
+        onReviewEvent: (event) => {
+          hookDebugLog(env, now, {
+            source: "codex_guardian",
+            event: event.type,
+            outcome: event.outcome
+          });
+
+          const report = resolveGuardianStateReport(event);
+          if (!report) {
+            return;
+          }
+          messageSender
+            .send({
+              type: "state",
+              sessionId,
+              state: report.state,
+              summary: report.summary,
+              confidence: 0.85,
+              source: "client_log",
+              updatedAt: now()
+            })
+            .catch(() => {});
+        }
+      });
+      const stopWithoutGuardian = stopWatcher;
+      stopWatcher = () => {
+        guardianWatcher.stop();
+        stopWithoutGuardian();
+      };
     }
   }
 
@@ -274,6 +321,23 @@ async function runRunCommand(parsed, dependencies) {
     cleanup();
     await messageSender.close();
   }
+}
+
+// Map a guardian review event to the pet state it proves. waiting_approval is
+// deliberately NOT among these: with the guardian reviewing, the user is not
+// being asked anything, and after a deny the request is resolved (the model
+// receives the rejection and continues) — there is no pending human decision.
+function resolveGuardianStateReport(event) {
+  if (event.type === "review_started") {
+    return { state: "reviewing", summary: "agent reviewing approval" };
+  }
+  if (event.type === "review_finished" && event.outcome === "allow") {
+    return { state: "running_tool", summary: "reviewer approved" };
+  }
+  if (event.type === "review_finished" && event.outcome === "deny") {
+    return { state: "thinking", summary: "reviewer denied" };
+  }
+  return undefined;
 }
 
 // Resolve whether live-status hooks should be injected for this run (any

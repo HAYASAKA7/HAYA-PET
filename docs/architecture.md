@@ -70,8 +70,14 @@ profile, so if the user already passes `-p/--profile`, injection is skipped with
 notice. Codex's hook command must be unquoted at the program position (it runs via
 `cmd /c`, which strips a leading quote) and its matchers can't use look-around
 (Rust regex) — see [known-issues.md](known-issues.md). Codex's L4 is **partial**:
-`PreToolUse`/`PermissionRequest` don't fire upstream yet, so only `thinking`/`idle`
-arrive today.
+`PreToolUse` doesn't fire upstream yet, so tool activity comes from an L3
+transcript watcher tailing the session rollout. `PermissionRequest` fires, but
+once at approval-request creation — before Codex routes the request to either
+the user or its guardian auto-reviewer ("Approve for me"), which never prompts
+the user at all. An L3 **guardian-trunk watcher** tails the guardian's own
+rollout (`source: {subagent:{other:"guardian"}}`, parented to the main thread)
+and refines the state: review running → `reviewing`, verdict allow →
+`running_tool`, verdict deny → `thinking`.
 
 Hooks alone can't see one moment: clients emit **no event when the user accepts a
 permission prompt** (denial and completion are observable; the accept click is

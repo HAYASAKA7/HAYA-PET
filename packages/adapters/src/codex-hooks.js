@@ -33,8 +33,17 @@
 //  - NOT FIRING (0.137): PreToolUse — so `running_tool` / `editing_files` never
 //    arrive in practice yet (upstream coverage gap, openai/codex#16732). The
 //    entries are kept (harmless no-ops) so they light up once Codex fixes it.
-//  - UNTESTED: PermissionRequest / PreCompact / SubagentStart|Stop (no approval /
-//    compaction / subagent occurred in the probe).
+//  - PermissionRequest (verified live on 0.139.0, semantics from codex-rs
+//    source): fires ONCE at approval-request creation, BEFORE the request is
+//    routed to the guardian auto-reviewer or the user. Under "Approve for me"
+//    (approvals_reviewer=auto_review, legacy alias guardian_subagent) the user
+//    is never prompted at all, so waiting_approval from this hook over-reports;
+//    the wrapper's codex-guardian-watcher refines it to reviewing /
+//    running_tool / thinking from the guardian's own rollout. The guardian
+//    fires NO hooks itself (SubAgentSource::Other is excluded from Subagent
+//    hooks), so these entries can't see it.
+//  - UNTESTED: PreCompact / SubagentStart|Stop (no compaction / subagent
+//    occurred in the probe).
 //
 // OPEN QUESTION (injection): unlike `claude --settings <file>`, Codex has no
 // per-invocation settings-file flag. Candidate non-mutating paths, best first:

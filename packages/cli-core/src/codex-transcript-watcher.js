@@ -1,16 +1,10 @@
 // Tails Codex session JSONL and reports tool start/finish activity. Codex hooks
 // cover turn lifecycle, but the transcript is the reliable source for tool use
 // when PreToolUse is unavailable.
-import {
-  closeSync,
-  existsSync,
-  openSync,
-  readdirSync,
-  readSync,
-  statSync
-} from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { parseCodexTranscriptLines } from "../../adapters/src/codex-transcript.js";
+import { listJsonlFiles, readRange, safeMtime, safeSize } from "./codex-rollout-fs.js";
 
 const DEFAULT_POLL_MS = 700;
 const MTIME_SKEW_MS = 2000;
@@ -100,61 +94,4 @@ export function discoverCodexTranscript(root, minMtime = 0) {
     }
   }
   return newest?.file;
-}
-
-function listJsonlFiles(root) {
-  const files = [];
-  const stack = [root];
-
-  while (stack.length > 0) {
-    const dir = stack.pop();
-    let entries;
-    try {
-      entries = readdirSync(dir, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-
-    for (const entry of entries) {
-      const full = join(dir, entry.name);
-      if (entry.isDirectory()) {
-        stack.push(full);
-      } else if (entry.isFile() && entry.name.endsWith(".jsonl")) {
-        files.push(full);
-      }
-    }
-  }
-
-  return files;
-}
-
-function safeSize(path) {
-  try {
-    return statSync(path).size;
-  } catch {
-    return 0;
-  }
-}
-
-function safeMtime(path) {
-  try {
-    return statSync(path).mtimeMs;
-  } catch {
-    return 0;
-  }
-}
-
-function readRange(path, start, end) {
-  const length = end - start;
-  if (length <= 0) {
-    return "";
-  }
-  const fd = openSync(path, "r");
-  try {
-    const buffer = Buffer.alloc(length);
-    const bytesRead = readSync(fd, buffer, 0, length, start);
-    return buffer.toString("utf8", 0, bytesRead);
-  } finally {
-    closeSync(fd);
-  }
 }

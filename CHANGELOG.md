@@ -7,6 +7,23 @@ All notable changes to HAYA Pet are documented here. This project adheres to
 > 0.2.0 npm publish; they are listed under 0.2.1, which is the first version that
 > ships them.
 
+## [0.2.6]
+
+### Fixed
+- **Codex "Approve for me" no longer shows a false *waiting for approval*.**
+  With `approvals_reviewer = auto_review` (the TUI's "Approve for me"; legacy
+  config alias `guardian_subagent`), Codex routes approval requests to a
+  guardian subagent and never prompts the user — but its `PermissionRequest`
+  hook still fires when the request is created, so the pet sat on *waiting for
+  approval* for the entire auto-review (and the approved command's run). A new
+  guardian-review watcher tails the guardian's own session rollout (the only
+  persisted trace of the review) and reports event-backed states instead:
+  *reviewing* while the guardian assesses, *running tools* on an `allow`
+  verdict, *thinking* on a `deny` (the rejection goes back to the model — no
+  human decision is pending). When the reviewer is the user (`approvals_reviewer
+  = "user"`, "Ask for approval"), nothing changes: *waiting for approval* still
+  shows until the user decides.
+
 ## [0.2.4]
 
 ### Fixed

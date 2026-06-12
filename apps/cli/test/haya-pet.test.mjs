@@ -483,6 +483,47 @@ test("codex hooks also start a transcript watcher for tool activity", async () =
   assert.ok(sent.every((message) => message.updatedAt === undefined || message.updatedAt === 42));
 });
 
+test("codex hooks also start a guardian-review watcher that reports review states", async () => {
+  const sent = [];
+  let fireReviewEvent;
+  let stopped = false;
+
+  await runAiPet(["run", "--client", "codex", "--", "codex"], {
+    cwd: process.cwd(),
+    env: { USERPROFILE: "C:\\Users\\A" },
+    now: () => 42,
+    heartbeatIntervalMs: 10,
+    send: async (message) => sent.push(message),
+    createStateFile: hooksStateFile(true),
+    injectCodexHooks: () => ({ profileName: "haya-pet", cleanup: () => {} }),
+    watchCodexTranscript: () => ({ stop: () => {} }),
+    watchCodexGuardianReviews: ({ onReviewEvent }) => {
+      fireReviewEvent = onReviewEvent;
+      return { stop: () => { stopped = true; } };
+    },
+    runGenericCommand: async (options) => {
+      fireReviewEvent({ type: "review_started" });
+      fireReviewEvent({ type: "review_finished", outcome: "allow" });
+      fireReviewEvent({ type: "review_started" });
+      fireReviewEvent({ type: "review_finished", outcome: "deny" });
+      // An unreadable verdict must not change the state (leave the cue as-is).
+      fireReviewEvent({ type: "review_finished", outcome: undefined });
+      return { sessionId: options.sessionId, pid: 1, exitCode: 0 };
+    }
+  });
+
+  assert.ok(stopped, "guardian watcher is stopped after the wrapped command exits");
+  const reviewStates = sent
+    .filter((message) => message.type === "state" && message.source === "client_log")
+    .map((message) => [message.state, message.summary]);
+  assert.deepEqual(reviewStates, [
+    ["reviewing", "agent reviewing approval"],
+    ["running_tool", "reviewer approved"],
+    ["reviewing", "agent reviewing approval"],
+    ["thinking", "reviewer denied"]
+  ]);
+});
+
 test("codex hooks are skipped (with a notice) when the user passes their own -p", async () => {
   const calls = [];
   let injected = 0;

@@ -187,10 +187,14 @@ Why opt in? Both clients show a one-time trust prompt when hooks are added. HAYA
 Pet lets you decide when to approve that instead of surprising you in the middle
 of work.
 
-Codex support is useful but still partial. Hooks report `thinking` and `idle`,
-while a transcript watcher reports tool/file activity. Waiting-for-approval
-support depends on an upstream Codex hook gap:
-[openai/codex#16732](https://github.com/openai/codex/issues/16732).
+Codex live status combines three sources: hooks report `thinking`/`idle` and
+approval requests, a transcript watcher reports tool/file activity, and a
+guardian-review watcher tracks Codex's **"Approve for me"** auto-reviewer — the
+pet shows *reviewing* while the guardian assesses a request and only shows
+*waiting for approval* when Codex actually asks you ("Ask for approval" mode).
+Per-tool `PreToolUse` hooks still depend on an upstream Codex gap
+([openai/codex#16732](https://github.com/openai/codex/issues/16732)); the
+transcript watcher covers that in the meantime.
 
 For any client, you can ask HAYA Pet to infer rough activity from terminal
 output:
