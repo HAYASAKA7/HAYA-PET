@@ -7,6 +7,20 @@ All notable changes to HAYA Pet are documented here. This project adheres to
 > 0.2.0 npm publish; they are listed under 0.2.1, which is the first version that
 > ships them.
 
+## [0.2.8]
+
+### Fixed
+- **Scrolling the session panel no longer fights you.** With four or more
+  sessions the bubble panel scrolls (introduced in 0.2.7), but two bugs made it
+  unusable: the scroll position snapped back to the top on every status update,
+  and a wheel scroll or scrollbar drag would "disconnect" mid-gesture and need
+  restarting. Both came from the panel rebuilding its entire DOM on each refresh
+  (every session push plus a 2 s linger tick). The panel now renders
+  incrementally — the list and each session's bubble persist across updates and
+  are mutated in place — so the scroll position holds and a gesture stays
+  attached to its element. The status spinner also no longer restarts on every
+  refresh.
+
 ## [0.2.7]
 
 ### Fixed

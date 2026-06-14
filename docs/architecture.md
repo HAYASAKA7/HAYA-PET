@@ -103,6 +103,14 @@ with mouse-move forwarding). The pet is positioned inside the window and dragged
 via CSS; the bubble panel is placed on whichever side of the pet has room so it
 stays fully on-screen. The pet currently lives on a single display's work area.
 
+The bubble panel shows at most three sessions and scrolls for the rest (capped
+by the smaller of a height budget and a count budget, see
+`bubble-list-viewport.js`). It renders **incrementally** — the list element and
+each session's bubble persist across updates and are mutated in place rather
+than rebuilt — because status pushes and a 2 s linger tick arrive constantly,
+and replacing the node under the cursor would drop an in-progress scroll
+gesture and reset the scroll position.
+
 ## Distribution & runtime dependencies
 
 - `electron` is a **runtime dependency** (not just a dev tool), because
