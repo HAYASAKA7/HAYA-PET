@@ -170,6 +170,34 @@ test("scrolls to a session when it newly fails", () => {
   }
 });
 
+test("shows the compact project label and keeps the full name as a tooltip", () => {
+  const restoreDocument = installFakeDocument();
+  try {
+    const container = new FakeElement("div");
+    const listView = createBubbleList(container, { onRender: createHostOnRender(container) });
+
+    listView.render([{
+      sessionId: "s1",
+      statusKind: "working",
+      statusLabel: "Working",
+      clientName: "Claude Code",
+      projectName: "netdisk-server",
+      projectLabel: "netdisk-se...",
+      summary: "running",
+      elapsedLabel: "1s"
+    }]);
+
+    const bubble = findBubble(container, "s1");
+    const title = childByClass(childByClass(bubble, "body"), "title");
+    assert.equal(childByClass(title, "client").textContent, "Claude Code");
+    assert.equal(childByClass(title, "project").textContent, "netdisk-se...");
+    // The full, untruncated name stays reachable on hover.
+    assert.equal(title.title, "Claude Code · netdisk-server");
+  } finally {
+    restoreDocument();
+  }
+});
+
 test("clears everything when no sessions remain", () => {
   const restoreDocument = installFakeDocument();
   try {

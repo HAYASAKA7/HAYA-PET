@@ -26,6 +26,20 @@ export function buildSessionSummary(session) {
   return buildStatusLabel(session?.state);
 }
 
+// Compacts a project name for the session bubble title, which sits beside the
+// (always-full) client name in a narrow overlay. Names up to `maxLength`
+// characters show whole; longer ones are cut to `maxLength` and marked with an
+// ellipsis. The full name is kept elsewhere on the view model for a tooltip.
+const DEFAULT_PROJECT_NAME_LENGTH = 10;
+
+export function truncateProjectName(name, maxLength = DEFAULT_PROJECT_NAME_LENGTH) {
+  const text = typeof name === "string" ? name : "";
+  if (text.length <= maxLength) {
+    return text;
+  }
+  return `${text.slice(0, maxLength)}...`;
+}
+
 export function formatElapsed(ms) {
   const totalSeconds = Math.max(0, Math.floor((Number.isFinite(ms) ? ms : 0) / 1000));
 

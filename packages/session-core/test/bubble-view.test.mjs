@@ -20,6 +20,8 @@ test("builds a bubble view model with label, summary, action, and elapsed", () =
   assert.equal(view.clientId, "codex");
   assert.equal(view.clientName, "Codex");
   assert.equal(view.projectName, "netdisk-server");
+  // The full name is preserved; projectLabel is the compact bubble display form.
+  assert.equal(view.projectLabel, "netdisk-se...");
   assert.equal(view.state, "waiting_approval");
   assert.equal(view.statusLabel, "Waiting for approval");
   assert.equal(view.summary, "waiting for command approval");
@@ -62,6 +64,12 @@ test("breaks connect-time ties by session id for a deterministic order", () => {
 
   const views = buildBubbleViews(sessions, 10_000);
   assert.deepEqual(views.map((view) => view.sessionId), ["sess_a", "sess_b"]);
+});
+
+test("keeps a short project name whole in projectLabel", () => {
+  const view = buildBubbleView({ ...baseSession, projectName: "api" }, 6_000);
+  assert.equal(view.projectName, "api");
+  assert.equal(view.projectLabel, "api");
 });
 
 test("marks the selected/pinned session", () => {

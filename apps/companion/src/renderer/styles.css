@@ -209,6 +209,7 @@ body {
 
 .bubble .client {
   font-weight: 600;
+  margin-right: 0.4em;
 }
 
 .bubble .project {

@@ -218,6 +218,15 @@ function renderBubble(bubble) {
   const title = document.createElement("div");
   title.className = "title";
 
+  // Persistent title parts (mutated in place across updates, like everything
+  // else here). The client name is always shown in full; the project name is
+  // shown compact (bubble.projectLabel) with the full name kept as a tooltip.
+  const client = document.createElement("span");
+  client.className = "client";
+  const project = document.createElement("span");
+  project.className = "project";
+  title.append(client, project);
+
   const activity = document.createElement("div");
   activity.className = "activity";
 
@@ -239,8 +248,11 @@ function applyBubble(el, bubble) {
   icon.title = bubble.statusLabel;
 
   const [title, activity] = body.children;
-  title.innerHTML = `<span class="client">${escapeHtml(bubble.clientName)}</span> ` +
-    `<span class="project">${escapeHtml(bubble.projectName)}</span>`;
+  const [client, project] = title.children;
+  client.textContent = bubble.clientName;
+  project.textContent = bubble.projectLabel ?? bubble.projectName;
+  // Hover reveals the full, untruncated "Client · Project".
+  title.title = bubble.projectName ? `${bubble.clientName} · ${bubble.projectName}` : bubble.clientName;
   activity.textContent = bubble.summary;
   activity.title = `${bubble.statusLabel} · ${bubble.elapsedLabel}`;
 }
@@ -256,11 +268,4 @@ function mostUrgentKind(bubbles) {
     }
   }
   return best;
-}
-
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
 }

@@ -3,7 +3,8 @@ import { test } from "../../../test/harness.mjs";
 import {
   buildStatusLabel,
   buildSessionSummary,
-  formatElapsed
+  formatElapsed,
+  truncateProjectName
 } from "../src/summaries.js";
 
 test("maps every normalized state to a human status label", () => {
@@ -35,4 +36,26 @@ test("formats elapsed durations compactly", () => {
   assert.equal(formatElapsed(5_000), "5s");
   assert.equal(formatElapsed(65_000), "1m 5s");
   assert.equal(formatElapsed(3_725_000), "1h 2m");
+});
+
+test("keeps short project names whole", () => {
+  assert.equal(truncateProjectName("api"), "api");
+  // Exactly at the 10-character budget stays untouched (no ellipsis).
+  assert.equal(truncateProjectName("ten-charrr"), "ten-charrr");
+});
+
+test("truncates long project names to 10 characters plus an ellipsis", () => {
+  assert.equal(truncateProjectName("netdisk-server"), "netdisk-se...");
+  assert.equal(truncateProjectName("a-very-long-project-name"), "a-very-lon...");
+});
+
+test("honours a custom max length", () => {
+  assert.equal(truncateProjectName("netdisk-server", 4), "netd...");
+  assert.equal(truncateProjectName("abc", 4), "abc");
+});
+
+test("coerces missing or non-string project names to an empty string", () => {
+  assert.equal(truncateProjectName(undefined), "");
+  assert.equal(truncateProjectName(null), "");
+  assert.equal(truncateProjectName(123), "");
 });

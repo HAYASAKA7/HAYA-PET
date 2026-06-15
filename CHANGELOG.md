@@ -7,6 +7,16 @@ All notable changes to HAYA Pet are documented here. This project adheres to
 > 0.2.0 npm publish; they are listed under 0.2.1, which is the first version that
 > ships them.
 
+## [0.3.2]
+
+### Changed
+- **Session bubble titles no longer run off the screen.** A long project name
+  used to stretch the bubble out to the panel's full width. The title now keeps
+  the **client name in full** (Codex, Claude Code, …) and shows the **project
+  name capped at 10 characters** with an ellipsis when it's longer (e.g.
+  `netdisk-server` → `netdisk-se...`); the complete `Client · Project` is kept
+  as a hover tooltip so nothing is lost.
+
 ## [0.3.1]
 
 ### Fixed
