@@ -12,6 +12,22 @@ test("ENDED_STATES covers the process-finished states", () => {
   assert.ok(ENDED_STATES.has("failed"));
   assert.ok(!ENDED_STATES.has("idle"));
   assert.ok(!ENDED_STATES.has("running_tool"));
+  // An interrupt ends the TURN, not the session — the session is still alive, so
+  // its bubble must NOT linger-out and vanish.
+  assert.ok(!ENDED_STATES.has("interrupted"));
+});
+
+test("keeps an interrupted bubble visible (the session is still alive)", () => {
+  // Long after any linger window would have elapsed, an interrupted bubble stays.
+  const result = resolveVisibleBubbles({
+    bubbles: [bubble("a", "interrupted")],
+    now: 1_000_000,
+    lingerState: { a: 1000 },
+    lingerMs: 2000
+  });
+  assert.deepEqual(result.visible.map((b) => b.sessionId), ["a"]);
+  assert.deepEqual(result.lingerState, {});
+  assert.equal(result.nextWakeMs, undefined);
 });
 
 test("keeps active (non-ended) bubbles visible with no linger tracking", () => {

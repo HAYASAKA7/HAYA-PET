@@ -683,6 +683,56 @@ test("a transcript denial clears the stuck approval to idle", async () => {
   assert.equal(idle.updatedAt, 42);
 });
 
+test("a transcript interrupt reports a failed status for Claude", async () => {
+  const sent = [];
+  let fireInterrupt;
+  await runAiPet(["run", "--client", "claude-code", "--", "claude"], {
+    cwd: process.cwd(),
+    env: { HAYA_PET_HOOKS: "1", USERPROFILE: "C:\\Users\\A" },
+    now: () => 42,
+    heartbeatIntervalMs: 10,
+    send: async (message) => sent.push(message),
+    injectClaudeHooks: () => ({ settingsPath: "/tmp/s.json", cleanup: () => {} }),
+    watchClaudeTranscript: ({ onInterrupt }) => { fireInterrupt = onInterrupt; return { stop: () => {} }; },
+    runGenericCommand: async (options) => {
+      // Simulate the user pressing Esc to interrupt mid-turn.
+      fireInterrupt({ type: "interrupted" });
+      return { sessionId: options.sessionId, pid: 1, exitCode: 0 };
+    }
+  });
+
+  const interrupted = sent.find((m) => m.type === "state" && m.source === "client_log");
+  assert.ok(interrupted, "a client_log state was sent on interrupt");
+  assert.equal(interrupted.state, "interrupted");
+  assert.equal(interrupted.summary, "interrupted");
+  assert.equal(interrupted.updatedAt, 42);
+});
+
+test("a transcript turn_aborted reports a failed status for Codex", async () => {
+  const sent = [];
+  let fireToolEvent;
+  await runAiPet(["run", "--client", "codex", "--", "codex"], {
+    cwd: process.cwd(),
+    env: { USERPROFILE: "C:\\Users\\A" },
+    now: () => 42,
+    heartbeatIntervalMs: 10,
+    send: async (message) => sent.push(message),
+    createStateFile: hooksStateFile(true),
+    injectCodexHooks: () => ({ profileName: "haya-pet", cleanup: () => {} }),
+    watchCodexTranscript: ({ onToolEvent }) => { fireToolEvent = onToolEvent; return { stop: () => {} }; },
+    runGenericCommand: async (options) => {
+      // Simulate the user pressing Esc: Codex writes a turn_aborted record.
+      fireToolEvent({ type: "turn_aborted", reason: "interrupted" });
+      return { sessionId: options.sessionId, pid: 1, exitCode: 0 };
+    }
+  });
+
+  const interrupted = sent.find((m) => m.type === "state" && m.source === "client_log" && m.state === "interrupted");
+  assert.ok(interrupted, "a client_log interrupted state was sent on turn_aborted");
+  assert.equal(interrupted.summary, "interrupted");
+  assert.equal(interrupted.updatedAt, 42);
+});
+
 test("non-hook-capable clients are never injected even with HAYA_PET_HOOKS=1", async () => {
   const calls = [];
   await runAiPet(["run", "--client", "generic", "--", "aider"], {

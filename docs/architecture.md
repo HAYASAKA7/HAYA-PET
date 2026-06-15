@@ -99,9 +99,16 @@ L2/PTY tradeoffs.
 
 The overlay is a transparent, always-on-top window spanning the work area, kept
 click-through except over the pet and bubble chips (via `setIgnoreMouseEvents`
-with mouse-move forwarding). The pet is positioned inside the window and dragged
-via CSS; the bubble panel is placed on whichever side of the pet has room so it
-stays fully on-screen. The pet currently lives on a single display's work area.
+with mouse-move forwarding). Over the pet the hit test is **pixel-precise**: the
+renderer samples the live canvas (`getImageData`) at the cursor and only
+intercepts where the current frame has opaque pixels, so the transparent margins
+of the sprite cell pass clicks through too. The press/drag is held interactive
+for its whole duration (the running frames have a different silhouette), and the
+resize grip keeps its own bounding-box reveal so pixel precision never hides it
+(`pet-hit-test.js`, `pet-window.js`). The pet is positioned inside the window and
+dragged via CSS; the bubble panel is placed on whichever side of the pet has room
+so it stays fully on-screen. The pet currently lives on a single display's work
+area.
 
 The bubble panel shows at most three sessions and scrolls for the rest (capped
 by the smaller of a height budget and a count budget, see

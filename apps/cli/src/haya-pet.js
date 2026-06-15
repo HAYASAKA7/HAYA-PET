@@ -241,6 +241,22 @@ async function runRunCommand(parsed, dependencies) {
             updatedAt: now()
           })
           .catch(() => {});
+      },
+      // Esc-interrupt fires no Stop hook, so without this the pet stays stuck on
+      // "thinking"/"running". The transcript's interrupt marker is the only signal.
+      onInterrupt: () => {
+        hookDebugLog(env, now, { source: "transcript", event: "interrupted", state: "interrupted" });
+        messageSender
+          .send({
+            type: "state",
+            sessionId,
+            state: "interrupted",
+            summary: "interrupted",
+            confidence: 0.9,
+            source: "client_log",
+            updatedAt: now()
+          })
+          .catch(() => {});
       }
     });
     stopWatcher = watcher.stop;
@@ -276,6 +292,24 @@ async function runRunCommand(parsed, dependencies) {
             toolName: event.toolName,
             state: event.state
           });
+
+          // Esc-interrupt fires no Stop hook, so without this the pet stays stuck
+          // on "thinking"/"running" until the stale sweep.
+          if (event.type === "turn_aborted") {
+            activeToolCalls.clear();
+            messageSender
+              .send({
+                type: "state",
+                sessionId,
+                state: "interrupted",
+                summary: "interrupted",
+                confidence: 0.9,
+                source: "client_log",
+                updatedAt: now()
+              })
+              .catch(() => {});
+            return;
+          }
 
           if (event.type === "tool_started") {
             activeToolCalls.add(event.toolCallId);

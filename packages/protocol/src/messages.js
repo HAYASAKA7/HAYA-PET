@@ -8,6 +8,9 @@ export const AI_CLIENT_STATES = Object.freeze([
   "reviewing",
   "compacting",
   "failed",
+  // The user interrupted the turn (Esc). Looks like a failure (red ✕) but is NOT
+  // terminal — the session is still alive, so its bubble must not linger-out.
+  "interrupted",
   "success",
   "stale",
   "exited"

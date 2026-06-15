@@ -39,6 +39,7 @@ const AI_STATE_TO_PET_ACTION = Object.freeze({
   reviewing: "review",
   compacting: "review",
   failed: "failed",
+  interrupted: "failed",
   success: "jumping",
   stale: "waiting",
   exited: "jumping"

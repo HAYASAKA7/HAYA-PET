@@ -16,6 +16,9 @@ const STATUS_KIND_BY_STATE = Object.freeze({
   waiting_approval: "attention",
   stale: "attention",
   failed: "failed",
+  // An interrupt shows the same red ✕ as a failure, but it is a live (non-ended)
+  // state — see bubble-linger ENDED_STATES — so the bubble stays put.
+  interrupted: "failed",
   idle: "done",
   success: "done",
   exited: "done"

@@ -82,6 +82,29 @@ test("a failed session still yields to active work for the stable action", () =>
   assert.equal(result.stableAction, "running");
 });
 
+test("an interrupt is a one-shot reaction, not a sticky stable action (like failed)", () => {
+  const result = resolveCompanionPetState({
+    bubbles: [bubble("a", "interrupted")],
+    prioritySessionId: "a",
+    previousStates: { a: "thinking" }
+  });
+  // plays the failed reaction once on the interrupt...
+  assert.deepEqual(result.oneShots, ["failed"]);
+  // ...but does not pin the pet on a looping action, and the session stays alive
+  // (still in the active bubble list, unlike exited/success).
+  assert.equal(result.stableAction, "idle");
+  assert.deepEqual(result.activeBubbles.map((b) => b.sessionId), ["a"]);
+});
+
+test("does not repeat the interrupt reaction while it stays interrupted", () => {
+  const result = resolveCompanionPetState({
+    bubbles: [bubble("a", "interrupted")],
+    prioritySessionId: "a",
+    previousStates: { a: "interrupted" }
+  });
+  assert.deepEqual(result.oneShots, []);
+});
+
 test("celebrates with a one-shot jump when a working turn finishes (working -> idle)", () => {
   const result = resolveCompanionPetState({
     bubbles: [bubble("a", "idle")],

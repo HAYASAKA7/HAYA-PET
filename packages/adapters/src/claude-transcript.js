@@ -17,6 +17,12 @@ const REJECTION_MARKERS = Object.freeze([
   "user chose not to"
 ]);
 
+// When the user presses Esc, Claude fires no Stop hook — it writes a synthetic
+// USER message carrying this marker (e.g. "[Request interrupted by user]" or
+// "[Request interrupted by user for tool use]"). That's the only signal the turn
+// was aborted, so the pet doesn't stay stuck on "thinking"/"running".
+const INTERRUPT_MARKER = "request interrupted by user";
+
 // Returns a resolution event for a single transcript line, or undefined.
 // Currently we only surface denials — the approve path is already covered by the
 // PostToolUse hook, and emitting on every result would race with it.
@@ -33,11 +39,21 @@ export function parseTranscriptLine(line) {
     return undefined;
   }
 
+  const isUserMessage = entry?.message?.role === "user";
+
   for (const block of content) {
     if (block?.type === "tool_result" && block.is_error === true) {
       const text = extractText(block.content).toLowerCase();
       if (REJECTION_MARKERS.some((marker) => text.includes(marker))) {
         return { type: "tool_denied", toolUseId: block.tool_use_id };
+      }
+    }
+
+    // Only a user message carries the synthetic interrupt marker; guarding on the
+    // role avoids matching the assistant merely quoting the phrase.
+    if (block?.type === "text" && isUserMessage) {
+      if (extractText(block).toLowerCase().includes(INTERRUPT_MARKER)) {
+        return { type: "interrupted" };
       }
     }
   }

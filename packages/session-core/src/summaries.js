@@ -8,6 +8,7 @@ const STATUS_LABELS = Object.freeze({
   reviewing: "Reviewing",
   compacting: "Compacting context",
   failed: "Failed",
+  interrupted: "Interrupted",
   success: "Done",
   stale: "Stale",
   exited: "Exited"

@@ -17,6 +17,14 @@ function rejection(toolUseId) {
   })}\n`;
 }
 
+function interrupt() {
+  return `${JSON.stringify({
+    type: "user",
+    message: { role: "user", content: [{ type: "text", text: "[Request interrupted by user]" }] },
+    interruptedMessageId: "msg_1"
+  })}\n`;
+}
+
 test("claudeProjectDirName sanitizes drive + separators like Claude does", () => {
   assert.equal(claudeProjectDirName("D:\\Projects\\AI\\haya-pet"), "D--Projects-AI-haya-pet");
   assert.equal(claudeProjectDirName("/home/a/proj"), "-home-a-proj");
@@ -116,6 +124,26 @@ test("watchClaudeTranscript handles a line split across two appends", () => {
   appendFileSync(path, full.slice(mid));
   watcher._tick();
   assert.deepEqual(denials, [{ type: "tool_denied", toolUseId: "toolu_split" }]);
+
+  watcher.stop();
+});
+
+test("watchClaudeTranscript reports an interrupt appended after it starts tailing", () => {
+  const dir = mkdtempSync(join(tmpdir(), "transcript-"));
+  const path = join(dir, "session.jsonl");
+  writeFileSync(path, "");
+
+  const interrupts = [];
+  const watcher = watchClaudeTranscript({
+    transcriptPath: path,
+    onInterrupt: (event) => interrupts.push(event),
+    ...noopTimers
+  });
+  watcher._tick();
+
+  appendFileSync(path, interrupt());
+  watcher._tick();
+  assert.deepEqual(interrupts, [{ type: "interrupted" }]);
 
   watcher.stop();
 });

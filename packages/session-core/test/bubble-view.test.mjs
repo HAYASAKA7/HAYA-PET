@@ -85,6 +85,14 @@ test("resolves failure to the 'failed' status kind (red cross)", () => {
   assert.equal(resolveBubbleStatusKind("failed"), "failed");
 });
 
+test("resolves an interrupt to the 'failed' status kind (red cross) but keeps it a live state", () => {
+  assert.equal(resolveBubbleStatusKind("interrupted"), "failed");
+  const view = buildBubbleView({ ...baseSession, state: "interrupted", summary: "interrupted" }, 6_000);
+  assert.equal(view.statusKind, "failed");
+  assert.equal(view.statusLabel, "Interrupted");
+  assert.equal(view.petAction, "failed");
+});
+
 test("resolves idle/finished states to the 'done' status kind (check mark)", () => {
   for (const state of ["idle", "success", "exited"]) {
     assert.equal(resolveBubbleStatusKind(state), "done", state);

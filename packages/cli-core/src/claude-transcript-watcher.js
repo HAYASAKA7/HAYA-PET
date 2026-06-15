@@ -34,6 +34,7 @@ export function watchClaudeTranscript(options = {}) {
     homeDir = process.env.USERPROFILE || process.env.HOME,
     startedAt = 0,
     onDenial = () => {},
+    onInterrupt = () => {},
     pollIntervalMs = DEFAULT_POLL_MS,
     projectsRoot,
     transcriptPath: fixedPath,
@@ -82,6 +83,8 @@ export function watchClaudeTranscript(options = {}) {
       for (const event of parseTranscriptLines(lines)) {
         if (event.type === "tool_denied") {
           onDenial(event);
+        } else if (event.type === "interrupted") {
+          onInterrupt(event);
         }
       }
     } catch {

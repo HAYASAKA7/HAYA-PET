@@ -68,3 +68,41 @@ test("parseTranscriptLines collects only denial events from a batch", () => {
     { type: "tool_denied", toolUseId: "toolu_b" }
   ]);
 });
+
+function interruptLine(text = "[Request interrupted by user]") {
+  return JSON.stringify({
+    type: "user",
+    message: { role: "user", content: [{ type: "text", text }] },
+    interruptedMessageId: "msg_1"
+  });
+}
+
+test("parseTranscriptLine detects a user interrupt during text generation", () => {
+  assert.deepEqual(parseTranscriptLine(interruptLine()), { type: "interrupted" });
+});
+
+test("parseTranscriptLine detects a user interrupt during tool use", () => {
+  assert.deepEqual(
+    parseTranscriptLine(interruptLine("[Request interrupted by user for tool use]")),
+    { type: "interrupted" }
+  );
+});
+
+test("parseTranscriptLine ignores the interrupt phrase quoted by the assistant", () => {
+  const line = JSON.stringify({
+    message: { role: "assistant", content: [{ type: "text", text: "Earlier you saw [Request interrupted by user]." }] }
+  });
+  assert.equal(parseTranscriptLine(line), undefined);
+});
+
+test("parseTranscriptLine ignores a normal user prompt", () => {
+  const line = JSON.stringify({ message: { role: "user", content: [{ type: "text", text: "fix this bug" }] } });
+  assert.equal(parseTranscriptLine(line), undefined);
+});
+
+test("parseTranscriptLines collects interrupt events alongside denials", () => {
+  assert.deepEqual(parseTranscriptLines([interruptLine(), rejectionLine("toolu_z")]), [
+    { type: "interrupted" },
+    { type: "tool_denied", toolUseId: "toolu_z" }
+  ]);
+});

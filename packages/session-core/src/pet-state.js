@@ -4,14 +4,16 @@ import { mapAiStateToPetAction } from "../../pet-core/src/atlas.js";
 const TERMINAL_STATES = new Set(["exited", "success"]);
 
 // States that should NOT drive a looping stable action. success/exited are
-// terminal; failed is a timed reaction (a stray error must not pin the pet on
-// the "failed" animation forever).
-const NON_STABLE_STATES = new Set(["exited", "success", "failed"]);
+// terminal; failed/interrupted are timed reactions (a stray error or an Esc must
+// not pin the pet on the "failed" animation forever). Note interrupted is NOT in
+// TERMINAL_STATES — the session is still alive, it just had its turn cut short.
+const NON_STABLE_STATES = new Set(["exited", "success", "failed", "interrupted"]);
 
 // States that play a one-shot reaction exactly once when first entered.
 const ONE_SHOT_BY_STATE = Object.freeze({
   success: "jumping",
-  failed: "failed"
+  failed: "failed",
+  interrupted: "failed"
 });
 
 // Active-work states. Transitioning from one of these to idle means a turn

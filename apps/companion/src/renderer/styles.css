@@ -61,7 +61,10 @@ body {
   transition: opacity 0.15s ease;
 }
 
-#pet:hover .resize-grip,
+/* .show-grip is toggled by pet-window.js based on the pet's bounding box, so the
+   grip's reveal is independent of the pixel-precise click-through (which would
+   otherwise hide it over the sprite's transparent corners). */
+#pet.show-grip .resize-grip,
 .resize-grip.active {
   opacity: 1;
 }

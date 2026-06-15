@@ -7,6 +7,27 @@ All notable changes to HAYA Pet are documented here. This project adheres to
 > 0.2.0 npm publish; they are listed under 0.2.1, which is the first version that
 > ships them.
 
+## [0.3.1]
+
+### Fixed
+- **Clicks pass through the empty space around the pet.** The overlay used the
+  pet's whole rectangular sprite cell as its click target, so the transparent
+  margins around the character still swallowed clicks meant for the window
+  behind it. The pet now intercepts the mouse only where the current frame
+  actually has opaque pixels — sampled live from the canvas, with no per-frame
+  cost — so the catch area hugs the visible silhouette. The resize grip is
+  unaffected: it still reveals and works across the pet's full bounding box.
+- **Interrupting a turn no longer leaves the pet stuck "thinking".** When you
+  press Esc while the agent is working — especially mid-thought, with no tool
+  running — neither Claude Code nor Codex fires a hook (`Stop` only fires on a
+  normal turn end), so the pet kept spinning on *thinking* until the 30 s stale
+  sweep. The transcript watchers now recognise each client's interrupt marker
+  (Claude's `[Request interrupted by user]` message; Codex's `turn_aborted`
+  record) and report a new `interrupted` status — a red ✕ that, unlike a real
+  failure, is **not** treated as a finished session, so the bubble stays put
+  (the session is still alive) instead of disappearing, and returns to the live
+  status as soon as you continue.
+
 ## [0.3.0]
 
 ### Fixed

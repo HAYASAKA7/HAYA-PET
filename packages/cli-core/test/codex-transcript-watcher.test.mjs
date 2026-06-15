@@ -15,6 +15,14 @@ function toolStart(toolName = "shell_command", callId = "call_1", timestamp) {
   })}\n`;
 }
 
+function turnAborted(timestamp) {
+  return `${JSON.stringify({
+    ...(timestamp ? { timestamp } : {}),
+    type: "event_msg",
+    payload: { type: "turn_aborted", reason: "interrupted" }
+  })}\n`;
+}
+
 test("discoverCodexTranscript finds the newest session jsonl under date folders", () => {
   const root = mkdtempSync(join(tmpdir(), "codex-sessions-"));
   const oldDir = join(root, "2026", "06", "07");
@@ -103,6 +111,27 @@ test("watchCodexTranscript replays current-session records when a transcript is 
       state: "running_tool"
     }
   ]);
+
+  watcher.stop();
+});
+
+test("watchCodexTranscript forwards a turn_aborted interrupt event", () => {
+  const dir = mkdtempSync(join(tmpdir(), "codex-transcript-"));
+  const path = join(dir, "session.jsonl");
+  writeFileSync(path, "");
+
+  const events = [];
+  const watcher = watchCodexTranscript({
+    transcriptPath: path,
+    onToolEvent: (event) => events.push(event),
+    ...noopTimers
+  });
+
+  watcher._tick();
+  appendFileSync(path, turnAborted());
+  watcher._tick();
+
+  assert.deepEqual(events, [{ type: "turn_aborted", reason: "interrupted" }]);
 
   watcher.stop();
 });

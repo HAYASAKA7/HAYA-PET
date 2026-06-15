@@ -95,3 +95,25 @@ test("parseCodexTranscriptLines can skip records older than the session start", 
     }
   ]);
 });
+
+test("parseCodexTranscriptLine detects a user-interrupted turn", () => {
+  const event = parseCodexTranscriptLine(JSON.stringify({
+    type: "event_msg",
+    payload: { type: "turn_aborted", reason: "interrupted" }
+  }));
+
+  assert.deepEqual(event, { type: "turn_aborted", reason: "interrupted" });
+});
+
+test("parseCodexTranscriptLine skips a turn_aborted older than the session start", () => {
+  const old = JSON.stringify({
+    timestamp: "2026-06-08T10:59:59.000Z",
+    type: "event_msg",
+    payload: { type: "turn_aborted", reason: "interrupted" }
+  });
+
+  assert.equal(
+    parseCodexTranscriptLine(old, { minTimestampMs: Date.parse("2026-06-08T11:00:00.000Z") }),
+    undefined
+  );
+});

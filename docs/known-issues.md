@@ -103,6 +103,32 @@ Issues found in live use, with their current status.
   `Notification` hook by type (`permission_prompt`→approval, `idle_prompt`→idle) so
   non-approval notifications no longer masquerade as approvals.
 
+## ✅ Resolved: pet stuck on "thinking" after an Esc interrupt
+
+- **Symptom:** With hooks enabled, pressing Esc to interrupt the agent — most
+  visibly while it was *thinking* with no tool running — left the pet spinning on
+  *thinking* (or *running*) until the 30 s stale sweep, instead of showing the
+  turn was cut short. Affected both Claude Code and Codex.
+- **Root cause:** Neither client fires a hook on an interrupt. `Stop` fires only
+  on a *normal* turn end, so the hook-driven status had no event to leave the
+  working state. A timeout was rejected (same reasoning as the denial case — it
+  would misreport a genuinely long turn).
+- **Fix:** The existing **L3 transcript watchers** already tail each client's
+  session JSONL, so they now also recognise the interrupt marker each client
+  *does* write — ground truth, not a timer. Claude records a synthetic user
+  message `[Request interrupted by user]` (and `…for tool use]`); Codex records
+  an `event_msg` with `payload.type: "turn_aborted"`. On seeing it the wrapper
+  reports a dedicated **`interrupted`** state (summary "interrupted", source
+  `client_log`).
+- **Why a new state, not `failed`:** the first attempt reported `failed`, which
+  *looked* right (red ✕) but is in `bubble-linger.js`'s `ENDED_STATES`, so the
+  linger logic treated the interrupt as a finished session and **hid the bubble
+  after ~2 s** — even though the session was still alive (no unregister on an
+  interrupt). `interrupted` maps to the same red ✕ kind and the same one-shot pet
+  reaction as `failed`, but is **not** terminal (not in `ENDED_STATES` or the
+  pet's `TERMINAL_STATES`), so the bubble stays visible until the next turn (or a
+  real exit). Heartbeats keep it from going stale.
+
 ## ✅ Resolved: pet stuck on "waiting for approval" after the user ACCEPTS
 
 - **Symptom:** The denial fix above covered "deny", but **accepting** a prompt

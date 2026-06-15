@@ -20,10 +20,13 @@ test("declares normalized AI states and state sources from the plan", () => {
     "reviewing",
     "compacting",
     "failed",
+    "interrupted",
     "success",
     "stale",
     "exited"
   ]);
+
+  assert.equal(isAiClientState("interrupted"), true);
 
   assert.deepEqual(STATE_SOURCES, [
     "wrapper",

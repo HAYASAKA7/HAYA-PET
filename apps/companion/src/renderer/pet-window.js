@@ -19,12 +19,15 @@ import { resolvePanelPlacement } from "../main/panel-placement.js";
 import { resolveBubbleListMaxHeight } from "../main/bubble-list-viewport.js";
 import { createInteractionController } from "./interaction-controller.js";
 import { createBubbleList } from "./session-bubbles.js";
+import { isOpaqueAlpha, isPointInsideRect } from "./pet-hit-test.js";
 
 const bridge = window.aiPet;
 const petEl = document.getElementById("pet");
 const canvas = document.getElementById("pet-canvas");
 const gripEl = document.getElementById("pet-resize-grip");
-const ctx = canvas.getContext("2d");
+// willReadFrequently: the click-through hit-test samples a single pixel on every
+// pointer move (see pointerHitsPetPixel), so keep the canvas CPU-backed.
+const ctx = canvas.getContext("2d", { willReadFrequently: true });
 const panelEl = document.getElementById("bubbles");
 
 // The sprite's natural cell size; the canvas is this times the user's scale.
@@ -190,6 +193,10 @@ function playOneShot(action) {
 
 canvas.addEventListener("pointerdown", (event) => {
   canvas.setPointerCapture(event.pointerId);
+  // Hold click-through off for the whole press: a drag swaps to the running
+  // frames, whose opaque pixels differ from the grabbed one, so re-running the
+  // pixel test mid-gesture could flip the window to pass-through and drop it.
+  petPressed = true;
   dragOffset = { x: event.offsetX, y: event.offsetY };
   // Window-local (clientX/Y) coords throughout — the overlay covers the work area.
   controller.pointerDown({ x: event.clientX, y: event.clientY, time: performance.now() });
@@ -206,11 +213,18 @@ canvas.addEventListener("pointermove", (event) => {
 canvas.addEventListener("pointerup", (event) => {
   // Click / double-click are delivered asynchronously via onAction; only the
   // synchronous drag-end is handled here.
+  petPressed = false;
   const result = controller.pointerUp({ x: event.clientX, y: event.clientY, time: performance.now() });
   if (result?.type === "drag-end") {
     animationState = clearDragAction(animationState);
     bridge?.savePetPosition?.(petLocal);
   }
+  refreshMouseIgnore(event.clientX, event.clientY);
+});
+
+canvas.addEventListener("pointercancel", () => {
+  petPressed = false;
+  animationState = clearDragAction(animationState);
 });
 
 // --- Resize grip: drag to scale the pet, double-click to reset ---
@@ -310,23 +324,54 @@ function renderBubbles() {
 // The overlay window covers a large area but should only intercept the mouse
 // over the pet and the bubble chips; everywhere else must pass through to the
 // desktop. The window is created ignoring mouse events (with forwarding), and
-// we flip it back on whenever the cursor is over an `.interactive` element.
+// we flip it back on whenever the cursor is over an `.interactive` element. Over
+// the pet canvas we go further and only intercept where the sprite has opaque
+// pixels, so the transparent margins of the cell pass clicks through too.
 
 let mouseIgnored;
+let petPressed = false; // a press/drag is in progress on the pet canvas
 let lastPointer = { x: -1, y: -1 };
+
+// True when the cursor is over a non-transparent pixel of the current frame. The
+// canvas already holds the current frame at the current scale, so sampling it
+// directly needs no atlas math. (Electron lets us read a file://-drawn canvas;
+// if a future version ever taints it, getImageData throws and we fall back to
+// treating the whole canvas box as interactive.)
+function pointerHitsPetPixel(x, y) {
+  if (!spritesheet) {
+    return true; // dev placeholder has no sprite: keep the whole box interactive
+  }
+  const rect = canvas.getBoundingClientRect();
+  if (!isPointInsideRect({ x, y }, rect)) {
+    return false;
+  }
+  const lx = Math.floor(x - rect.left);
+  const ly = Math.floor(y - rect.top);
+  try {
+    return isOpaqueAlpha(ctx.getImageData(lx, ly, 1, 1).data[3]);
+  } catch {
+    return true; // tainted canvas: degrade to full-box interactivity
+  }
+}
 
 function refreshMouseIgnore(x, y) {
   // While the grip is captured, the pointer can briefly leave it (the pet only
   // approximately tracks the diagonal); flipping click-through mid-drag would
-  // drop the pointerup, so hold interaction until the drag ends.
-  if (resizeDrag) {
+  // drop the pointerup, so hold interaction until the drag ends. The same holds
+  // for a press/drag on the pet body (petPressed).
+  if (resizeDrag || petPressed) {
     return;
   }
   if (!Number.isFinite(x) || !Number.isFinite(y)) {
     return;
   }
-  const target = document.elementFromPoint(x, y);
-  const interactive = Boolean(target && target.closest(".interactive"));
+  const interactiveEl = document.elementFromPoint(x, y)?.closest(".interactive");
+  let interactive = Boolean(interactiveEl);
+  // Pixel precision applies only to the pet body; the grip and bubbles (their
+  // own .interactive elements) keep their full hit area.
+  if (interactiveEl === canvas) {
+    interactive = pointerHitsPetPixel(x, y);
+  }
   const ignore = !interactive;
   if (ignore !== mouseIgnored) {
     mouseIgnored = ignore;
@@ -334,9 +379,20 @@ function refreshMouseIgnore(x, y) {
   }
 }
 
+// The resize grip reveals whenever the cursor is over the pet's bounding box —
+// the same judgement as before — kept independent of the pixel-precise
+// click-through so passing clicks through transparent areas never hides it. The
+// window forwards move events even while click-through is on, so this stays
+// accurate over transparent (passed-through) areas too.
+function refreshGripVisibility(x, y) {
+  const inside = Number.isFinite(x) && Number.isFinite(y) && isPointInsideRect({ x, y }, canvas.getBoundingClientRect());
+  petEl.classList.toggle("show-grip", inside || Boolean(resizeDrag));
+}
+
 window.addEventListener("mousemove", (event) => {
   lastPointer = { x: event.clientX, y: event.clientY };
   refreshMouseIgnore(event.clientX, event.clientY);
+  refreshGripVisibility(event.clientX, event.clientY);
 });
 
 if (bridge) {

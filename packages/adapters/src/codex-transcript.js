@@ -12,12 +12,12 @@ export function parseCodexTranscriptLine(line, options = {}) {
     return undefined;
   }
 
-  if (entry?.type !== "response_item") {
+  if (!entry || typeof entry !== "object") {
     return undefined;
   }
 
   // Skip records from before the current session (used when replaying a
-  // freshly-discovered transcript so an earlier session's tool calls don't
+  // freshly-discovered transcript so an earlier session's events don't
   // masquerade as live activity). Records without a parseable timestamp are
   // kept — losing live events is worse than a rare stale one.
   const minTimestampMs = options.minTimestampMs ?? 0;
@@ -30,6 +30,17 @@ export function parseCodexTranscriptLine(line, options = {}) {
 
   const payload = entry.payload;
   if (!payload || typeof payload !== "object") {
+    return undefined;
+  }
+
+  // The user pressing Esc aborts the turn. Codex fires no Stop hook on an abort,
+  // so this event_msg is the only signal the turn ended by interruption — without
+  // it the pet stays stuck on "thinking" until the stale sweep.
+  if (entry.type === "event_msg" && payload.type === "turn_aborted") {
+    return { type: "turn_aborted", reason: typeof payload.reason === "string" ? payload.reason : undefined };
+  }
+
+  if (entry.type !== "response_item") {
     return undefined;
   }
 
