@@ -64,7 +64,7 @@ npm install -g @hayasaka7/haya-pet
 From source:
 
 ```bash
-git clone <repo-url> haya-pet
+git clone https://github.com/HAYASAKA7/HAYA-PET.git haya-pet
 cd haya-pet
 npm install
 npm link
