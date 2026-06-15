@@ -7,6 +7,17 @@ All notable changes to HAYA Pet are documented here. This project adheres to
 > 0.2.0 npm publish; they are listed under 0.2.1, which is the first version that
 > ships them.
 
+## [0.3.0]
+
+### Fixed
+- **A fresh install now shows a real pet.** The package has always shipped a
+  ready-to-use pet (`assets/fallback-pet`), but discovery only scanned the
+  user's pet folders (`~/.codex/pets`, `~/.haya-pet/pets`), so a new user with
+  no pets got a blue "dev placeholder" box and an empty pet list instead. The
+  bundled pet is now composed into discovery as a last resort — appended after
+  any of the user's own pets (which still win and stay the default) and deduped
+  by id — so the overlay always renders a real character out of the box.
+
 ## [0.2.8]
 
 ### Fixed

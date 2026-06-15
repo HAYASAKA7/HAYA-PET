@@ -18,7 +18,7 @@ import { resolveSavedPosition } from "./display-manager.js";
 import { getPetScale, setPetScale, setSelectedPet, updateGlobalPetPosition } from "./position-store.js";
 import { buildTrayMenu, buildTrayTooltip } from "./tray-menu.js";
 import { createStateFile } from "./state-file.js";
-import { discoverPets } from "./pet-loader.js";
+import { discoverPetsWithFallback } from "./pet-loader.js";
 import { checkForUpdate, UPDATE_PAGE_URL } from "../../../../packages/app-state/src/update-check.js";
 
 const STALE_SWEEP_INTERVAL_MS = 10_000;
@@ -67,7 +67,7 @@ if (!app.requestSingleInstanceLock()) {
 async function bootstrap() {
   positionState = await stateFile.load();
   petScale = clampScale(getPetScale(positionState));
-  pets = await discoverPets(paths.petSearchPaths);
+  pets = await discoverPetsWithFallback(paths.petSearchPaths);
 
   // Clients fire no event at the moment the user ACCEPTS a permission prompt
   // (only denial/finish are observable), so a waiting_approval session would

@@ -14,7 +14,7 @@ import { watchCodexGuardianReviews as defaultWatchCodexGuardianReviews } from ".
 import { ensureCompanionConnection } from "../../../packages/cli-core/src/companion-launcher.js";
 import { createIpcClient as defaultCreateIpcClient } from "../../../packages/daemon-core/src/ipc-server.js";
 import { getDefaultPaths } from "../../../packages/platform-core/src/paths.js";
-import { discoverPets as defaultDiscoverPets } from "../../../packages/pet-core/src/discovery.js";
+import { discoverPetsWithFallback as defaultDiscoverPets } from "../../../packages/pet-core/src/discovery.js";
 import { createStateFile as defaultCreateStateFile } from "../../../packages/app-state/src/state-file.js";
 import { getSelectedPetId, setSelectedPet, getHooksEnabled, setHooksEnabled } from "../../../packages/app-state/src/state.js";
 import { checkForUpdate, UPDATE_COMMAND } from "../../../packages/app-state/src/update-check.js";
