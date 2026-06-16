@@ -34,8 +34,7 @@ const HOOK_TABLE = Object.freeze([
   { event: "PermissionDenied", state: "idle", summary: "denied" },
   { event: "PreCompact", state: "compacting" },
   { event: "Stop", state: "idle" },
-  { event: "StopFailure", state: "idle", summary: "stopped" },
-  { event: "SubagentStop", state: "idle" }
+  { event: "StopFailure", state: "idle", summary: "stopped" }
 ]);
 
 // Resolve the pet state for a Claude event. `detail` is the tool name for

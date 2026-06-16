@@ -2,6 +2,20 @@
 
 Issues found in live use, with their current status.
 
+## ✅ Resolved: Claude Code subagent completion changed the main session status
+
+- **Symptom:** In Claude Code multi-agent runs, the main agent could already be
+  stopped while a subagent was still finishing. When that late subagent emitted
+  `SubagentStop`, the pet treated it as a main-session `idle` update and could
+  show a misleading working/done transition after the main agent had settled.
+- **Root cause:** The Claude hook table mapped `SubagentStop` to `idle`. That is
+  only safe if subagent completion is ordered before the main turn finishes, which
+  Claude Code does not guarantee.
+- **Fix:** Claude `SubagentStop` is now ignored. Main-session idle still comes
+  from Claude's real `Stop` hook, while late subagent completion cannot override
+  the current main-agent state. Codex keeps its separate behavior because Codex
+  uses `Stop` as the only idle signal and treats `SubagentStop` as mid-turn.
+
 ## ✅ Resolved: false "waiting for approval" while Codex auto-reviews an approval (Approve for me)
 
 - **Symptom:** Running Codex under the pet with the **"Approve for me"** preset
@@ -228,8 +242,9 @@ observation (`--observe`) or L1 lifecycle as the fallback. Current state:
   lifecycle status). Live in-session status is **opt-in** via `HAYA_PET_HOOKS=1`,
   which injects a settings file (`claude --settings <stable-file>`, no change to
   your global config) wiring Claude's `UserPromptSubmit`/`PreToolUse`/`PostToolUse`/
-  `Notification`/`PreCompact`/`Stop`/`SubagentStop` events to `haya-pet state
-  <state>`, reported to the daemon over the IPC pipe. `PreToolUse` distinguishes
+  `Notification`/`PreCompact`/`Stop` events to `haya-pet state <state>`, reported
+  to the daemon over the IPC pipe. `SubagentStop` is intentionally ignored because
+  it is not a main-turn idle signal. `PreToolUse` distinguishes
   file-editing tools (`Edit`/`Write`/`MultiEdit`/`NotebookEdit` → *editing files*)
   from other tools (→ *running tools*) via the hook `matcher`. **Why opt-in:**
   injecting hooks makes Claude show a one-time *review hooks* trust prompt; the

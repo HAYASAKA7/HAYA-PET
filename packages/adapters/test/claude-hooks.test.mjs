@@ -9,10 +9,13 @@ test("mapClaudeEventToState covers activity events", () => {
   assert.equal(mapClaudeEventToState("PreCompact"), "compacting");
   assert.equal(mapClaudeEventToState("Stop"), "idle");
   assert.equal(mapClaudeEventToState("StopFailure"), "idle");
-  assert.equal(mapClaudeEventToState("SubagentStop"), "idle");
   assert.equal(mapClaudeEventToState("PermissionDenied"), "idle");
   assert.equal(mapClaudeEventToState("PermissionRequest"), "waiting_approval");
   assert.equal(mapClaudeEventToState("Unknown"), undefined);
+});
+
+test("mapClaudeEventToState ignores Claude SubagentStop", () => {
+  assert.equal(mapClaudeEventToState("SubagentStop"), undefined);
 });
 
 test("mapClaudeEventToState branches PreToolUse on tool name", () => {
@@ -80,8 +83,9 @@ test("buildClaudeHookSettings includes all subscribed events", () => {
   for (const event of [
     "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure",
     "PermissionRequest", "Notification", "PermissionDenied", "PreCompact",
-    "Stop", "StopFailure", "SubagentStop"
+    "Stop", "StopFailure"
   ]) {
     assert.ok(settings.hooks[event], `missing hook event ${event}`);
   }
+  assert.equal(settings.hooks.SubagentStop, undefined);
 });

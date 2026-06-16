@@ -7,6 +7,15 @@ All notable changes to HAYA Pet are documented here. This project adheres to
 > 0.2.0 npm publish; they are listed under 0.2.1, which is the first version that
 > ships them.
 
+## [0.3.3]
+
+### Fixed
+- **Claude Code subagent completion no longer changes the main session status.**
+  Claude Code can emit `SubagentStop` after the main agent has already stopped,
+  so treating that event as `idle` could make the pet react to a stale subagent
+  completion instead of the main agent's real state. The Claude hook adapter now
+  ignores `SubagentStop`; the main turn still ends on Claude's `Stop` event.
+
 ## [0.3.2]
 
 ### Changed
