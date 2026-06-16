@@ -74,10 +74,13 @@ notice. Codex's hook command must be unquoted at the program position (it runs v
 transcript watcher tailing the session rollout. `PermissionRequest` fires, but
 once at approval-request creation — before Codex routes the request to either
 the user or its guardian auto-reviewer ("Approve for me"), which never prompts
-the user at all. An L3 **guardian-trunk watcher** tails the guardian's own
+the user at all. The hook therefore calls a Codex-specific permission reporter:
+when the resolved Codex config says `approvals_reviewer = "auto_review"` (or the
+legacy `guardian_subagent` alias), it reports `reviewing`; otherwise it reports
+`waiting_approval`. An L3 **guardian-trunk watcher** tails the guardian's own
 rollout (`source: {subagent:{other:"guardian"}}`, parented to the main thread)
-and refines the state: review running → `reviewing`, verdict allow →
-`running_tool`, verdict deny → `thinking`.
+and refines the state from real review events: review running → `reviewing`,
+verdict allow → `running_tool`, verdict deny → `thinking`.
 
 Hooks alone can't see one moment: clients emit **no event when the user accepts a
 permission prompt** (denial and completion are observable; the accept click is

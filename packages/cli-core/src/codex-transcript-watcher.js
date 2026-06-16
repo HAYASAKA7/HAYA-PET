@@ -4,7 +4,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { parseCodexTranscriptLines } from "../../adapters/src/codex-transcript.js";
-import { listJsonlFiles, readRange, safeMtime, safeSize } from "./codex-rollout-fs.js";
+import { listJsonlFiles, readFirstLine, readRange, safeMtime, safeSize } from "./codex-rollout-fs.js";
 
 const DEFAULT_POLL_MS = 700;
 const MTIME_SKEW_MS = 2000;
@@ -89,9 +89,34 @@ export function discoverCodexTranscript(root, minMtime = 0) {
     if (mtime < minMtime) {
       continue;
     }
+    const sessionStartedAt = readCodexSessionStartedAt(file);
+    if (!Number.isFinite(sessionStartedAt) || sessionStartedAt < minMtime) {
+      continue;
+    }
     if (!newest || mtime > newest.mtime) {
       newest = { file, mtime };
     }
   }
   return newest?.file;
+}
+
+function readCodexSessionStartedAt(file) {
+  const line = readFirstLine(file);
+  if (line === undefined) {
+    return undefined;
+  }
+
+  let entry;
+  try {
+    entry = JSON.parse(line);
+  } catch {
+    return undefined;
+  }
+
+  if (entry?.type !== "session_meta" || typeof entry.timestamp !== "string") {
+    return undefined;
+  }
+
+  const timestampMs = Date.parse(entry.timestamp);
+  return Number.isFinite(timestampMs) ? timestampMs : undefined;
 }

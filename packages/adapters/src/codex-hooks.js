@@ -37,11 +37,12 @@
 //    source): fires ONCE at approval-request creation, BEFORE the request is
 //    routed to the guardian auto-reviewer or the user. Under "Approve for me"
 //    (approvals_reviewer=auto_review, legacy alias guardian_subagent) the user
-//    is never prompted at all, so waiting_approval from this hook over-reports;
-//    the wrapper's codex-guardian-watcher refines it to reviewing /
-//    running_tool / thinking from the guardian's own rollout. The guardian
+//    is never prompted at all, so this hook calls a Codex-specific permission
+//    reporter instead of hard-coding waiting_approval. The wrapper passes the
+//    resolved approvals reviewer mode in env; auto_review reports reviewing,
+//    while manual/unknown reviewer config reports waiting_approval. The guardian
 //    fires NO hooks itself (SubAgentSource::Other is excluded from Subagent
-//    hooks), so these entries can't see it.
+//    hooks), so the wrapper also tails the guardian rollout directly.
 //  - UNTESTED: PreCompact / SubagentStart|Stop (no compaction / subagent
 //    occurred in the probe).
 //
@@ -76,7 +77,7 @@ const HOOK_TABLE = Object.freeze([
   { event: "PreToolUse", matcher: EDIT_TOOLS_MATCHER, state: "editing_files" },
   { event: "PreToolUse", matcher: COMMAND_TOOLS_MATCHER, state: "running_tool" },
   { event: "PostToolUse", state: "thinking" },
-  { event: "PermissionRequest", state: "waiting_approval" },
+  { event: "PermissionRequest", command: "codex-permission-request" },
   { event: "PreCompact", state: "compacting" },
   { event: "PostCompact", state: "thinking", summary: "compacted" },
   // A subagent finishing is mid-turn — the main agent keeps working, so this is
@@ -111,15 +112,21 @@ export function mapCodexEventToState(event, toolName) {
 // node path, which is space-free for fnm/scoop/nvm layouts; a space-tolerant
 // path (short 8.3 name, or `command_windows`) is a follow-up before shipping.
 export function buildCodexHookSettings({ nodePath, cliPath }) {
-  const command = (state, summary) => {
+  const stateCommand = (state, summary) => {
     // nodePath unquoted (must not lead with a quote); cliPath quoted for spaces.
-    const base = `${nodePath} ${quote(cliPath)} state ${state}`;
-    return summary ? `${base} --summary ${summary}` : base;
+    let output = `${nodePath} ${quote(cliPath)} state ${state}`;
+    if (summary) {
+      output += ` --summary ${summary}`;
+    }
+    return output;
   };
+  const command = (row) => row.command
+    ? `${nodePath} ${quote(cliPath)} ${row.command}`
+    : stateCommand(row.state, row.summary);
 
   const hooks = {};
   for (const row of HOOK_TABLE) {
-    const hookEntry = { hooks: [{ type: "command", command: command(row.state, row.summary) }] };
+    const hookEntry = { hooks: [{ type: "command", command: command(row) }] };
     if (row.matcher !== undefined) {
       hookEntry.matcher = row.matcher;
     }

@@ -32,12 +32,17 @@ Issues found in live use, with their current status.
   guardian `deny` returns the rationale to the **model** as a rejected tool call
   ("This action was rejected due to unacceptable risk. …"), so no human decision
   is ever pending. Our Codex hook table mapped `PermissionRequest` →
-  `waiting_approval` unconditionally. No better hook exists: nothing fires on
-  guardian start/finish (the guardian session is `SubAgentSource::Other`, which
-  is excluded from Subagent hooks), and `GuardianAssessment` events are
-  explicitly not persisted to the main rollout (`rollout/src/policy.rs`).
-- **Fix:** an **L3 guardian-trunk watcher** (`codex-guardian-watcher.js` +
-  `adapters/codex-guardian.js`). The guardian runs as its own Codex session that
+  `waiting_approval` unconditionally. Nothing fires on guardian start/finish
+  (the guardian session is `SubAgentSource::Other`, which is excluded from
+  Subagent hooks), and `GuardianAssessment` events are explicitly not persisted
+  to the main rollout (`rollout/src/policy.rs`).
+- **Fix:** a Codex-specific `PermissionRequest` reporter plus an **L3
+  guardian-trunk watcher** (`codex-guardian-watcher.js` +
+  `adapters/codex-guardian.js`). The reporter checks the wrapped session's
+  resolved Codex `approvals_reviewer` config: `auto_review` / legacy
+  `guardian_subagent` reports **reviewing** immediately, while manual/unknown
+  reviewer config reports **waiting for approval**. This is config/event-backed,
+  not a timer. The guardian runs as its own Codex session that
   writes its own rollout under `~/.codex/sessions` — session_meta has
   `source: {subagent: {other: "guardian"}}` and `parent_thread_id` = the main
   thread; each review is one turn (`task_started` → `task_complete` with the
@@ -51,16 +56,28 @@ Issues found in live use, with their current status.
   there is no trunk and behavior is unchanged: `PermissionRequest` →
   *waiting for approval* until the user decides (process-tree/denial detection
   resolve it, as before).
-- **Known limitations (accepted):** (1) A ≤ ~1 s *waiting for approval* flicker
-  can precede *reviewing* (the hook fires immediately; the trunk poll is 700 ms).
-  (2) Reviews of a **collab subagent's** actions (multi-agent runs) have their
+- **Known limitations (accepted):** (1) Reviews of a **collab subagent's** actions (multi-agent runs) have their
   own trunks keyed to the subagent's thread and are not watched; a subagent's
-  `PermissionRequest` can still briefly show *waiting for approval* until the
-  next main-session event. (3) After a guardian deny the pet shows *thinking*,
+  `PermissionRequest` still follows the wrapped session's resolved reviewer
+  config; if that subagent is using different approval settings, the parent
+  session may not be able to distinguish it. (2) After a guardian deny the pet shows *thinking*,
   not *waiting for approval* — by design: Codex resolves the request itself and
   the model decides what to do next (it may ask the user in chat, which then
   surfaces as turn-end *idle*). The TUI's passive `/approve` denial-override
   picker is not a blocking prompt.
+
+## ✅ Resolved: Codex pet looked busy immediately after startup
+
+- **Symptom:** Starting a wrapped Codex session and doing nothing could still make
+  the pet show `shell_command` or `thinking` instead of `idle`.
+- **Root cause:** The Codex transcript and guardian watchers originally chose the
+  newest rollout by file mtime, then filtered individual records by timestamp.
+  Another already-running Codex session could keep writing fresh records after
+  HAYA Pet started, making its rollout look like the wrapped session even though
+  it began earlier.
+- **Fix:** Both watchers now inspect the first `session_meta` line and require
+  its timestamp to belong to this wrapper launch. Old-but-active Codex sessions
+  are ignored even if their files continue to receive fresh writes.
 
 ## ✅ Resolved: Codex `/quit` hung on its goodbye (and the pet kept showing "working")
 
@@ -298,14 +315,15 @@ observation (`--observe`) or L1 lifecycle as the fallback. Current state:
     reports `editing_files`, and HAYA Pet returns to `thinking` after active tool
     calls drain.
   - **`PermissionRequest` fires** (confirmed live on 0.139.0), but **once, at
-    approval-request creation, before routing** — under "Approve for me"
-    (`approvals_reviewer = auto_review` / legacy `guardian_subagent`) the user is
-    never actually prompted, so the hook alone over-reports *waiting for
-    approval*. An L3 **guardian-trunk watcher** tails the guardian reviewer's own
-    rollout (`source: {subagent:{other:"guardian"}}`, `parent_thread_id` = main
-    thread) and refines the state: review running → *reviewing*, verdict `allow`
-    → *running_tool*, verdict `deny` → *thinking*. See the resolved
-    false-waiting-for-approval entry above.
+    approval-request creation, before routing**. The hook calls
+    `haya-pet codex-permission-request`, which uses the wrapped session's
+    resolved `approvals_reviewer` config: `auto_review` / legacy
+    `guardian_subagent` reports *reviewing*, while manual review reports
+    *waiting for approval*. An L3 **guardian-trunk watcher** tails the guardian
+    reviewer's own rollout (`source: {subagent:{other:"guardian"}}`,
+    `parent_thread_id` = main thread) and refines the state: review running →
+    *reviewing*, verdict `allow` → *running_tool*, verdict `deny` → *thinking*.
+    See the resolved false-waiting-for-approval entry above.
 - **Antigravity (`agy`)** — **not yet implemented** (no hook injection). Uses
   `--observe` or L1 lifecycle. A Gemini-schema hook adapter is a planned follow-up.
 - **Generic / unknown** — no hooks; PTY observation (`--observe`) or L1 lifecycle.

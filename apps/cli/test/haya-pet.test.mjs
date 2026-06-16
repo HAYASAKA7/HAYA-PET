@@ -399,8 +399,54 @@ test("parses the state command", () => {
     command: "state",
     state: "thinking",
     summary: undefined,
-    session: "sess_q"
+    session: "sess_q",
   });
+});
+
+test("parses the Codex permission request reporter command", () => {
+  assert.deepEqual(parseAiPetArgs(["codex-permission-request"]), {
+    command: "codex-permission-request"
+  });
+});
+
+test("Codex permission request reporter shows reviewing for auto-review", async () => {
+  const messages = [];
+  await runAiPet(["codex-permission-request"], {
+    env: {
+      HAYA_PET_SESSION_ID: "sess_review",
+      HAYA_PET_CODEX_APPROVAL_REVIEWER: "auto_review"
+    },
+    now: () => 123,
+    ipcEndpoint: "test-endpoint",
+    createIpcClient: async () => ({
+      send: async (message) => messages.push(message),
+      close: async () => {}
+    })
+  });
+
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].state, "reviewing");
+  assert.equal(messages[0].summary, "agent reviewing approval");
+});
+
+test("Codex permission request reporter shows waiting for manual reviewer", async () => {
+  const messages = [];
+  await runAiPet(["codex-permission-request"], {
+    env: {
+      HAYA_PET_SESSION_ID: "sess_manual",
+      HAYA_PET_CODEX_APPROVAL_REVIEWER: "user"
+    },
+    now: () => 123,
+    ipcEndpoint: "test-endpoint",
+    createIpcClient: async () => ({
+      send: async (message) => messages.push(message),
+      close: async () => {}
+    })
+  });
+
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].state, "waiting_approval");
+  assert.equal(messages[0].summary, "approval");
 });
 
 const hooksStateFile = (hooksEnabled) => () => ({
@@ -509,6 +555,26 @@ test("persisted `hooks on` injects a Codex profile via -p at the front of args",
 
   assert.equal(injected, 1, "config preference enables Codex hooks");
   assert.deepEqual(calls[0].args, ["-p", "haya-pet"], "profile flag goes at the front");
+  assert.equal(calls[0].env.HAYA_PET_CODEX_APPROVAL_REVIEWER, "user");
+});
+
+test("codex hooks pass auto-review config to the PermissionRequest reporter", async () => {
+  const calls = [];
+  await runAiPet(["run", "--client", "codex", "--", "codex"], {
+    cwd: process.cwd(),
+    env: { USERPROFILE: "C:\\Users\\A" },
+    heartbeatIntervalMs: 10,
+    send: async () => {},
+    createStateFile: hooksStateFile(true),
+    injectCodexHooks: () => ({ profileName: "haya-pet", cleanup: () => {} }),
+    readFile: () => 'approvals_reviewer = "auto_review"\n',
+    runGenericCommand: async (options) => {
+      calls.push(options);
+      return { sessionId: options.sessionId, pid: 1, exitCode: 0 };
+    }
+  });
+
+  assert.equal(calls[0].env.HAYA_PET_CODEX_APPROVAL_REVIEWER, "auto_review");
 });
 
 test("codex hooks also start a transcript watcher for tool activity", async () => {

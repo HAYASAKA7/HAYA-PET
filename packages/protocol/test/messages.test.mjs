@@ -107,6 +107,10 @@ test("rejects unknown message types", () => {
     () => assertProtocolMessage({ type: "unknown", sessionId: "sess_abc123" }),
     /Unknown protocol message type: unknown/
   );
+  assert.throws(
+    () => assertProtocolMessage({ type: "deferred_state", sessionId: "sess_abc123" }),
+    /Unknown protocol message type: deferred_state/
+  );
 });
 
 test("accepts a shutdown control message without a sessionId", () => {

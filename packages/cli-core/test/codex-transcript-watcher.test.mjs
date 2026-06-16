@@ -7,6 +7,14 @@ import { discoverCodexTranscript, watchCodexTranscript } from "../src/codex-tran
 
 const noopTimers = { setInterval: () => ({}), clearInterval: () => {} };
 
+function sessionMeta(timestamp, id = "thread-1") {
+  return `${JSON.stringify({
+    timestamp,
+    type: "session_meta",
+    payload: { id, parent_thread_id: null, source: "cli", thread_source: "user" }
+  })}\n`;
+}
+
 function toolStart(toolName = "shell_command", callId = "call_1", timestamp) {
   return `${JSON.stringify({
     ...(timestamp ? { timestamp } : {}),
@@ -32,8 +40,8 @@ test("discoverCodexTranscript finds the newest session jsonl under date folders"
 
   const oldFile = join(oldDir, "rollout-old.jsonl");
   const newFile = join(newDir, "rollout-new.jsonl");
-  writeFileSync(oldFile, "{}\n");
-  writeFileSync(newFile, "{}\n");
+  writeFileSync(oldFile, sessionMeta("2026-06-07T10:00:00.000Z", "old-thread"));
+  writeFileSync(newFile, sessionMeta("2026-06-08T10:00:00.000Z", "new-thread"));
   appendFileSync(newFile, "{}\n");
 
   assert.equal(discoverCodexTranscript(root), newFile);
@@ -45,7 +53,7 @@ test("discoverCodexTranscript skips files older than session start", () => {
   mkdirSync(dir, { recursive: true });
 
   const oldFile = join(dir, "rollout-old.jsonl");
-  writeFileSync(oldFile, "{}\n");
+  writeFileSync(oldFile, sessionMeta("2026-06-08T10:00:00.000Z", "old-thread"));
   const past = new Date(Date.now() - 3_600_000);
   utimesSync(oldFile, past, past);
 
@@ -88,6 +96,7 @@ test("watchCodexTranscript replays current-session records when a transcript is 
   writeFileSync(
     path,
     [
+      sessionMeta("2026-06-08T11:00:00.500Z", "new-thread"),
       toolStart("shell_command", "call_old", "2026-06-08T10:59:59.000Z"),
       toolStart("shell_command", "call_new", "2026-06-08T11:00:01.000Z")
     ].join("")
@@ -111,6 +120,34 @@ test("watchCodexTranscript replays current-session records when a transcript is 
       state: "running_tool"
     }
   ]);
+
+  watcher.stop();
+});
+
+test("watchCodexTranscript ignores fresh writes to sessions that started before this wrapper", () => {
+  const root = mkdtempSync(join(tmpdir(), "codex-sessions-"));
+  const dir = join(root, "2026", "06", "08");
+  mkdirSync(dir, { recursive: true });
+  const path = join(dir, "rollout-old-active.jsonl");
+  writeFileSync(
+    path,
+    [
+      sessionMeta("2026-06-08T10:00:00.000Z", "older-thread"),
+      toolStart("shell_command", "call_other_session", "2026-06-08T11:00:01.000Z")
+    ].join("")
+  );
+
+  const events = [];
+  const watcher = watchCodexTranscript({
+    sessionsRoot: root,
+    startedAt: Date.parse("2026-06-08T11:00:00.000Z"),
+    onToolEvent: (event) => events.push(event),
+    ...noopTimers
+  });
+
+  watcher._tick();
+
+  assert.deepEqual(events, []);
 
   watcher.stop();
 });

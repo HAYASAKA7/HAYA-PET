@@ -37,6 +37,7 @@ test("parseStateArgs reads state, summary, and session", () => {
 test("parseStateArgs rejects a missing state and unknown options", () => {
   assert.throws(() => parseStateArgs([]), /state requires a state name/);
   assert.throws(() => parseStateArgs(["thinking", "--bogus"]), /Unknown state option/);
+  assert.throws(() => parseStateArgs(["waiting_approval", "--defer-ms", "1200"]), /Unknown state option/);
 });
 
 test("runStateCommand sends one official_plugin state message", async () => {

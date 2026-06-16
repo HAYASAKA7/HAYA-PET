@@ -50,6 +50,11 @@ export function watchCodexGuardianReviews(options = {}) {
       return undefined;
     }
     const meta = classifyCodexSessionMeta(firstLine) ?? null;
+    const sessionStartedAt = readSessionMetaTimestamp(firstLine);
+    if (meta && minMtime > 0 && (!Number.isFinite(sessionStartedAt) || sessionStartedAt < minMtime)) {
+      metaByPath.set(file, null);
+      return null;
+    }
     metaByPath.set(file, meta);
     return meta;
   };
@@ -133,4 +138,20 @@ export function watchCodexGuardianReviews(options = {}) {
     },
     _tick: tick
   };
+}
+
+function readSessionMetaTimestamp(line) {
+  let entry;
+  try {
+    entry = JSON.parse(line);
+  } catch {
+    return undefined;
+  }
+
+  if (entry?.type !== "session_meta" || typeof entry.timestamp !== "string") {
+    return undefined;
+  }
+
+  const timestampMs = Date.parse(entry.timestamp);
+  return Number.isFinite(timestampMs) ? timestampMs : undefined;
 }

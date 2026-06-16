@@ -10,7 +10,7 @@ import {
 test("mapCodexEventToState covers activity events", () => {
   assert.equal(mapCodexEventToState("UserPromptSubmit"), "thinking");
   assert.equal(mapCodexEventToState("PostToolUse"), "thinking");
-  assert.equal(mapCodexEventToState("PermissionRequest"), "waiting_approval");
+  assert.equal(mapCodexEventToState("PermissionRequest"), undefined);
   assert.equal(mapCodexEventToState("PreCompact"), "compacting");
   assert.equal(mapCodexEventToState("PostCompact"), "thinking");
   assert.equal(mapCodexEventToState("SubagentStart"), "running_tool");
@@ -62,6 +62,13 @@ test("buildCodexHookSettings splits PreToolUse into edit + command matchers", ()
   const other = pre.find((e) => /running_tool/.test(e.hooks[0].command));
   assert.equal(edit.matcher, "apply_patch");
   assert.equal(other.matcher, "shell_command");
+});
+
+test("buildCodexHookSettings routes PermissionRequest through the Codex reporter", () => {
+  const permission = buildCodexHookSettings({ nodePath: "n", cliPath: "c" }).hooks.PermissionRequest;
+  assert.equal(permission.length, 1);
+  assert.match(permission[0].hooks[0].command, /codex-permission-request$/);
+  assert.doesNotMatch(permission[0].hooks[0].command, /--defer-ms/);
 });
 
 test("no matcher uses look-around (Codex's Rust regex crate rejects it)", () => {

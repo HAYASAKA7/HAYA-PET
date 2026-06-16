@@ -7,6 +7,22 @@ All notable changes to HAYA Pet are documented here. This project adheres to
 > 0.2.0 npm publish; they are listed under 0.2.1, which is the first version that
 > ships them.
 
+## [0.3.4]
+
+### Fixed
+- **Codex "Approve for me" status no longer depends on a timer.** The
+  `PermissionRequest` hook now calls a Codex-specific reporter instead of
+  emitting delayed `waiting_approval`. The wrapper resolves
+  `approvals_reviewer` for the session: `auto_review` / legacy
+  `guardian_subagent` reports *reviewing*, while manual review still reports
+  *waiting for approval*. The daemon no longer has a deferred-state protocol or
+  timer-based approval fallback.
+- **Fresh Codex sessions no longer inherit status from an older active Codex
+  session.** The transcript and guardian watchers now require the rollout's
+  first `session_meta.timestamp` to belong to this wrapper launch, so a
+  different Codex session writing `shell_command` / `thinking` after startup
+  cannot make an idle pet look busy.
+
 ## [0.3.3]
 
 ### Fixed

@@ -187,11 +187,12 @@ Why opt in? Both clients show a one-time trust prompt when hooks are added. HAYA
 Pet lets you decide when to approve that instead of surprising you in the middle
 of work.
 
-Codex live status combines three sources: hooks report `thinking`/`idle` and
-approval requests, a transcript watcher reports tool/file activity, and a
-guardian-review watcher tracks Codex's **"Approve for me"** auto-reviewer — the
-pet shows *reviewing* while the guardian assesses a request and only shows
-*waiting for approval* when Codex actually asks you ("Ask for approval" mode).
+Codex live status combines three sources: hooks report `thinking`/`idle`, a
+Codex-specific permission reporter maps approval requests from the session's
+resolved `approvals_reviewer` setting, and transcript watchers report tool/file
+activity plus guardian-review outcomes. With **"Approve for me"** the pet shows
+*reviewing* immediately; *waiting for approval* is reserved for Codex's manual
+"Ask for approval" mode.
 Per-tool `PreToolUse` hooks still depend on an upstream Codex gap
 ([openai/codex#16732](https://github.com/openai/codex/issues/16732)); the
 transcript watcher covers that in the meantime.

@@ -1,3 +1,4 @@
+import { assertProtocolMessage } from "../../protocol/src/messages.js";
 import { createSessionRegistry } from "../../session-core/src/registry.js";
 import { attachProtocolStream } from "./ipc-transport.js";
 
@@ -10,7 +11,8 @@ export function createDaemonRuntime(options = {}) {
     registry,
 
     handleMessage(message) {
-      const session = registry.applyMessage(message);
+      const checked = assertProtocolMessage(message);
+      const session = registry.applyMessage(checked);
       onSessionChanged(session);
       return session;
     },

@@ -58,6 +58,10 @@ export function parseAiPetArgs(argv) {
     return parseStateArgs(rest);
   }
 
+  if (command === "codex-permission-request") {
+    return { command: "codex-permission-request" };
+  }
+
   if (command === "hooks") {
     return parseHooksArgs(rest);
   }
@@ -82,6 +86,10 @@ export async function runAiPet(argv, dependencies = {}) {
 
   if (parsed.command === "state") {
     return runStateCommand(parsed, dependencies);
+  }
+
+  if (parsed.command === "codex-permission-request") {
+    return runCodexPermissionRequestCommand(parsed, dependencies);
   }
 
   if (parsed.command === "hooks") {
@@ -172,6 +180,21 @@ async function reportUpdateNotice(updateCheck, print) {
   }
 }
 
+function runCodexPermissionRequestCommand(_parsed, dependencies = {}) {
+  const env = dependencies.env ?? process.env;
+  const reviewer = normalizeCodexApprovalsReviewer(env.HAYA_PET_CODEX_APPROVAL_REVIEWER);
+  const autoReview = isCodexAutoReviewer(reviewer);
+  return runStateCommand(
+    {
+      command: "state",
+      state: autoReview ? "reviewing" : "waiting_approval",
+      summary: autoReview ? "agent reviewing approval" : "approval",
+      session: undefined
+    },
+    dependencies
+  );
+}
+
 function readOwnVersion() {
   try {
     const packagePath = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "package.json");
@@ -179,6 +202,116 @@ function readOwnVersion() {
   } catch {
     return undefined;
   }
+}
+
+function resolveCodexApprovalsReviewer(options = {}) {
+  const env = options.env ?? process.env;
+  const explicit = normalizeCodexApprovalsReviewer(env.HAYA_PET_CODEX_APPROVAL_REVIEWER);
+  if (explicit) {
+    return explicit;
+  }
+
+  const fromArgs = findCodexApprovalsReviewerInArgs(options.childArgs ?? []);
+  if (fromArgs) {
+    return fromArgs;
+  }
+
+  const home = options.codexHome ?? env.CODEX_HOME ?? resolveHomeCodexDir(options.homeDir, env);
+  const readFile = options.readFile ?? readFileSync;
+  const fromConfig = readCodexApprovalsReviewerFromConfig(home, readFile);
+  return fromConfig ?? "user";
+}
+
+function resolveHomeCodexDir(homeDir, env) {
+  const home = homeDir ?? env.USERPROFILE ?? env.HOME;
+  return home ? join(home, ".codex") : undefined;
+}
+
+function findCodexApprovalsReviewerInArgs(args) {
+  let reviewer;
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    let configValue;
+    if (arg === "-c" || arg === "--config") {
+      configValue = args[index + 1];
+      index += 1;
+    } else if (arg.startsWith("--config=")) {
+      configValue = arg.slice("--config=".length);
+    } else if (arg.startsWith("-c") && arg.length > 2) {
+      configValue = arg.slice(2);
+    }
+
+    const parsed = parseApprovalsReviewerAssignment(configValue);
+    if (parsed) {
+      reviewer = parsed;
+    }
+  }
+  return reviewer;
+}
+
+function readCodexApprovalsReviewerFromConfig(codexHome, readFile) {
+  if (!codexHome) {
+    return undefined;
+  }
+  try {
+    return parseTopLevelApprovalsReviewer(readFile(join(codexHome, "config.toml"), "utf8"));
+  } catch {
+    return undefined;
+  }
+}
+
+function parseTopLevelApprovalsReviewer(toml) {
+  let inTopLevel = true;
+  for (const line of String(toml).split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) {
+      continue;
+    }
+    if (trimmed.startsWith("[")) {
+      inTopLevel = false;
+      continue;
+    }
+    if (!inTopLevel) {
+      continue;
+    }
+    const reviewer = parseApprovalsReviewerAssignment(trimmed);
+    if (reviewer) {
+      return reviewer;
+    }
+  }
+  return undefined;
+}
+
+function parseApprovalsReviewerAssignment(value) {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const match = /^\s*approvals_reviewer\s*=\s*(.+?)\s*(?:#.*)?$/.exec(value);
+  if (!match) {
+    return undefined;
+  }
+  return normalizeCodexApprovalsReviewer(stripTomlString(match[1]));
+}
+
+function stripTomlString(value) {
+  const trimmed = String(value).trim();
+  const quote = trimmed[0];
+  if ((quote === "\"" || quote === "'") && trimmed.endsWith(quote)) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+function normalizeCodexApprovalsReviewer(value) {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const normalized = value.trim().toLowerCase().replace(/-/g, "_");
+  return normalized || undefined;
+}
+
+function isCodexAutoReviewer(value) {
+  return value === "auto_review" || value === "guardian_subagent";
 }
 
 async function runRunCommand(parsed, dependencies) {
@@ -276,7 +409,17 @@ async function runRunCommand(parsed, dependencies) {
     } else {
       const injected = injectCodexHooks();
       childArgs = ["-p", injected.profileName, ...parsed.childArgs];
-      childEnv = { ...env, HAYA_PET_SESSION_ID: sessionId };
+      childEnv = {
+        ...env,
+        HAYA_PET_SESSION_ID: sessionId,
+        HAYA_PET_CODEX_APPROVAL_REVIEWER: resolveCodexApprovalsReviewer({
+          childArgs: parsed.childArgs,
+          env,
+          homeDir: dependencies.homeDir,
+          codexHome: dependencies.codexHome,
+          readFile: dependencies.readFile
+        })
+      };
       cleanup = injected.cleanup;
 
       const activeToolCalls = new Set();
@@ -353,8 +496,9 @@ async function runRunCommand(parsed, dependencies) {
       // With "Approve for me" (approvals_reviewer=auto_review, legacy alias
       // guardian_subagent), Codex routes approval requests to a guardian
       // subagent and never shows the human approval UI — yet the
-      // PermissionRequest hook still fires at request creation, which used to
-      // pin the pet on a false "waiting for approval" for the whole review.
+      // PermissionRequest hook still fires at request creation. The hook's
+      // reporter uses the resolved approvals reviewer config: auto-review
+      // reports reviewing immediately, while manual review reports waiting.
       // The guardian's own rollout is the only observable record of the
       // review, so tail it: a review turn starting proves the agent is
       // reviewing; an "allow" verdict proves the action proceeds; a "deny"
