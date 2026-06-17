@@ -1,6 +1,6 @@
 import { app, BrowserWindow, ipcMain, Menu, nativeImage, screen, shell, Tray } from "electron";
 import { fileURLToPath } from "node:url";
-import { readFileSync } from "node:fs";
+import { appendFileSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createDaemonRuntime } from "../../../../packages/daemon-core/src/daemon-runtime.js";
 import { createIpcServer } from "../../../../packages/daemon-core/src/ipc-server.js";
@@ -29,6 +29,35 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // icon left users with no way to exit.
 const TRAY_ICON_DATA_URL =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAANElEQVR4nGNgoAXIW/HvPzZMtkaiDCJWM05DKDKAVM0YhowaQAUDBj4dUCUpE2MQQY3kAACyf/g8DHVl5wAAAABJRU5ErkJggg==";
+
+// Best-effort daemon-side diagnostic, mirroring the wrapper's HAYA_PET_HOOK_DEBUG.
+// When HAYA_PET_DAEMON_DEBUG points at a file, append one JSONL line per incoming
+// non-heartbeat message in DAEMON ARRIVAL ORDER, with its updatedAt. This is the
+// only place the true apply order is visible: the registry is last-writer-wins by
+// arrival and ignores updatedAt, so a stale "working" message that arrives after
+// "interrupted" would surface here as the clobber. Never throws.
+function debugLogDaemonMessage(message) {
+  const target = process.env.HAYA_PET_DAEMON_DEBUG;
+  if (!target || !message || message.type === "heartbeat") {
+    return;
+  }
+  try {
+    appendFileSync(
+      target,
+      `${JSON.stringify({
+        ts: Date.now(),
+        type: message.type,
+        sessionId: message.sessionId,
+        state: message.state,
+        source: message.source,
+        updatedAt: message.updatedAt,
+        summary: message.summary
+      })}\n`
+    );
+  } catch {
+    // diagnostics must never break the daemon
+  }
+}
 
 const paths = getDefaultPaths();
 const capabilities = getPlatformCapabilities();
@@ -113,6 +142,7 @@ async function bootstrap() {
         app.quit();
         return;
       }
+      debugLogDaemonMessage(message);
       return runtime.handleMessage(message);
     },
     onProtocolError: (error) => console.error("protocol error:", error.message)

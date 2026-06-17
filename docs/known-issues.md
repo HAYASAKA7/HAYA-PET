@@ -2,6 +2,43 @@
 
 Issues found in live use, with their current status.
 
+## ⏳ In progress: Codex interrupt sometimes leaves the pet "working"
+
+- **Symptom:** Pressing Esc to interrupt a Codex turn occasionally does **not**
+  flip the pet to *interrupted* — it keeps showing a working state (*thinking* /
+  *running*) even though the turn was cut short. Intermittent ("some occasions").
+- **Investigation so far:** The "a late `function_call_output` resets the state to
+  *thinking*" theory was **ruled out** — across 257 real `turn_aborted` events in
+  live `~/.codex/sessions`, **zero** had a tool result after the abort. Codex
+  fires no hook on an abort, and the L3 transcript watcher does record
+  `turn_aborted` and emit `interrupted`.
+- **Leading suspect:** The daemon registry applies session state **last-writer-
+  wins by IPC arrival order** (`registry.js` `applyState` ignores `updatedAt` and
+  `confidence`). Hooks (separate `haya-pet state` subprocesses) and the interrupt
+  watcher use different IPC connections, so a stale "working" message can arrive
+  *after* `interrupted` and clobber it. Discovery edges (a resumed session whose
+  `session_meta.timestamp` predates the wrapper launch is filtered out; concurrent
+  Codex sessions can attach the watcher to the wrong rollout) are secondary
+  candidates.
+- **Status:** Instrumented with a daemon-side arrival trace (`HAYA_PET_DAEMON_DEBUG`,
+  in `apps/companion/src/main/index.js`) to confirm whether `interrupted` is never
+  emitted (watcher/discovery) vs. emitted-then-clobbered (arrival-order race).
+  **Fix to follow shortly** — likely an `updatedAt`-monotonic guard in `applyState`.
+
+## ✅ Resolved: Claude pet stuck on "compacting" after a compaction
+
+- **Symptom:** With Claude Code hooks enabled, the pet entered *compacting* on
+  `PreCompact` and never left — it sat there until the 30 s stale sweep or the
+  next prompt. Most visible after a manual `/compact`.
+- **Root cause:** The Claude hook table subscribed `PreCompact` → *compacting* but
+  had **no completion event**. Claude's `Stop` does not fire for a compaction, so
+  nothing cleared the state. (Codex already subscribed `PostCompact`.)
+- **Fix:** The Claude hook table now also subscribes **`PostCompact`**, split by
+  the documented `manual`/`auto` trigger matcher: a **manual** `/compact` returns
+  to *idle* (control is back at the prompt), while an **auto** compaction resumes
+  to *thinking* (the agent continues the turn) and the next real event refines it.
+  Verified live on the manual path; auto uses the identical matcher mechanism.
+
 ## ✅ Resolved: Claude Code subagent completion changed the main session status
 
 - **Symptom:** In Claude Code multi-agent runs, the main agent could already be
@@ -259,8 +296,10 @@ observation (`--observe`) or L1 lifecycle as the fallback. Current state:
   lifecycle status). Live in-session status is **opt-in** via `HAYA_PET_HOOKS=1`,
   which injects a settings file (`claude --settings <stable-file>`, no change to
   your global config) wiring Claude's `UserPromptSubmit`/`PreToolUse`/`PostToolUse`/
-  `Notification`/`PreCompact`/`Stop` events to `haya-pet state <state>`, reported
-  to the daemon over the IPC pipe. `SubagentStop` is intentionally ignored because
+  `Notification`/`PreCompact`/`PostCompact`/`Stop` events to `haya-pet state <state>`,
+  reported to the daemon over the IPC pipe. `PostCompact` is split by its
+  `manual`/`auto` trigger matcher (manual `/compact` → *idle*, auto compaction →
+  *thinking*) so the pet never sticks on *compacting*. `SubagentStop` is intentionally ignored because
   it is not a main-turn idle signal. `PreToolUse` distinguishes
   file-editing tools (`Edit`/`Write`/`MultiEdit`/`NotebookEdit` → *editing files*)
   from other tools (→ *running tools*) via the hook `matcher`. **Why opt-in:**

@@ -33,6 +33,14 @@ const HOOK_TABLE = Object.freeze([
   { event: "Notification", matcher: "idle_prompt", state: "idle", summary: "idle" },
   { event: "PermissionDenied", state: "idle", summary: "denied" },
   { event: "PreCompact", state: "compacting" },
+  // PostCompact is the authoritative "compaction finished" signal (verified in
+  // the Claude hooks docs). Without it the pet stays stuck on `compacting` until
+  // the 30s stale sweep. The `trigger` matcher splits the two outcomes: a manual
+  // /compact hands control back to an idle prompt, while an AUTO compaction fires
+  // mid-turn and the agent immediately resumes working (thinking) — the next real
+  // event (PreToolUse/Stop) refines from there. Mirrors codex-hooks' PostCompact.
+  { event: "PostCompact", matcher: "manual", state: "idle", summary: "compacted" },
+  { event: "PostCompact", matcher: "auto", state: "thinking", summary: "compacted" },
   { event: "Stop", state: "idle" },
   { event: "StopFailure", state: "idle", summary: "stopped" }
 ]);
@@ -48,6 +56,11 @@ export function mapClaudeEventToState(event, detail) {
     if (detail === "permission_prompt") return "waiting_approval";
     if (detail === "idle_prompt") return "idle";
     return undefined;
+  }
+  if (event === "PostCompact") {
+    // `detail` is the compaction trigger ("manual" | "auto"). A manual /compact
+    // ends at an idle prompt; an auto compaction resumes the turn (thinking).
+    return detail === "manual" ? "idle" : "thinking";
   }
   const entry = HOOK_TABLE.find((row) => row.event === event && row.matcher === undefined);
   return entry?.state;

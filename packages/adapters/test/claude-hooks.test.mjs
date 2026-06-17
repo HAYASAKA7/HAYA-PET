@@ -31,6 +31,15 @@ test("mapClaudeEventToState branches Notification on type (approval vs idle)", (
   assert.equal(mapClaudeEventToState("Notification", "auth_success"), undefined);
 });
 
+test("mapClaudeEventToState branches PostCompact on compaction trigger", () => {
+  // Manual /compact returns to an idle prompt; auto compaction resumes the turn.
+  assert.equal(mapClaudeEventToState("PostCompact", "manual"), "idle");
+  assert.equal(mapClaudeEventToState("PostCompact", "auto"), "thinking");
+  // Unknown/missing trigger defaults to the "still working" assumption, which the
+  // next real event corrects — never leaving the pet stuck on `compacting`.
+  assert.equal(mapClaudeEventToState("PostCompact"), "thinking");
+});
+
 test("buildClaudeHookSettings bakes node + cli, no volatile session id", () => {
   const settings = buildClaudeHookSettings({
     nodePath: "/usr/bin/node",
@@ -62,6 +71,15 @@ test("buildClaudeHookSettings splits Notification into approval + idle matchers"
   assert.match(idle.hooks[0].command, /state idle --summary idle$/);
 });
 
+test("buildClaudeHookSettings splits PostCompact into manual + auto triggers", () => {
+  const post = buildClaudeHookSettings({ nodePath: "n", cliPath: "c" }).hooks.PostCompact;
+  assert.equal(post.length, 2);
+  const manual = post.find((e) => e.matcher === "manual");
+  const auto = post.find((e) => e.matcher === "auto");
+  assert.match(manual.hooks[0].command, /state idle --summary compacted$/);
+  assert.match(auto.hooks[0].command, /state thinking --summary compacted$/);
+});
+
 test("buildClaudeHookSettings keeps two non-overlapping PreToolUse matchers", () => {
   const pre = buildClaudeHookSettings({ nodePath: "n", cliPath: "c" }).hooks.PreToolUse;
   assert.equal(pre.length, 2);
@@ -83,7 +101,7 @@ test("buildClaudeHookSettings includes all subscribed events", () => {
   for (const event of [
     "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure",
     "PermissionRequest", "Notification", "PermissionDenied", "PreCompact",
-    "Stop", "StopFailure"
+    "PostCompact", "Stop", "StopFailure"
   ]) {
     assert.ok(settings.hooks[event], `missing hook event ${event}`);
   }

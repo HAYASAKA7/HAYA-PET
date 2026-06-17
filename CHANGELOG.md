@@ -7,6 +7,34 @@ All notable changes to HAYA Pet are documented here. This project adheres to
 > 0.2.0 npm publish; they are listed under 0.2.1, which is the first version that
 > ships them.
 
+## [0.3.5]
+
+### Fixed
+- **The pet no longer gets stuck on "compacting" in Claude Code.** `PreCompact`
+  set the status to *compacting*, but nothing ever cleared it — Claude's `Stop`
+  does not fire for a `/compact`, so the pet sat on *compacting* until the next
+  prompt or the 30 s stale sweep. The Claude hook table now also subscribes
+  **`PostCompact`**, split by the documented `manual`/`auto` trigger matcher: a
+  **manual** `/compact` returns to *idle* (control is back at the prompt), while
+  an **auto** compaction (context filled mid-turn) resumes to *thinking* and the
+  next real event refines from there. Mirrors Codex, which already handled
+  `PostCompact`.
+
+### Added
+- **`HAYA_PET_DAEMON_DEBUG` diagnostic.** When set to a file path, the companion
+  appends one JSONL line per incoming non-heartbeat message in daemon **arrival
+  order** (with `updatedAt`), making out-of-order state delivery observable. Added
+  to investigate the Codex interrupt issue below.
+
+### Known issues
+- **Codex interrupt can still leave the pet "working".** On some interrupts the
+  pet keeps a working state instead of *interrupted*. The transcript watcher does
+  record `turn_aborted` (the "a late tool result resets it" theory was ruled out
+  across 257 real aborts), so the suspect is the daemon applying state by IPC
+  **arrival order**, letting a stale "working" message land after *interrupted*.
+  Instrumented via `HAYA_PET_DAEMON_DEBUG`; **fix to follow shortly.** See
+  `docs/known-issues.md`.
+
 ## [0.3.4]
 
 ### Fixed
