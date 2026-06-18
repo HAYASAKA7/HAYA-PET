@@ -175,6 +175,43 @@ test("watchCodexGuardianReviews ignores guardian trunks for sessions that starte
   watcher.stop();
 });
 
+test("watchCodexGuardianReviews follows a resumed main session in the same cwd", () => {
+  const { root, dir } = makeSessionsRoot();
+  writeFileSync(
+    join(dir, "rollout-main-resumed.jsonl"),
+    metaLineAt("2026-06-12T00:00:00.000Z", {
+      id: "main-1",
+      parent_thread_id: null,
+      source: "cli",
+      thread_source: "user",
+      cwd: "D:\\Work\\project"
+    })
+  );
+  writeFileSync(
+    join(dir, "rollout-guardian.jsonl"),
+    metaLineAt("2026-06-12T01:01:00.000Z", {
+      id: "guardian-1",
+      parent_thread_id: "main-1",
+      source: { subagent: { other: "guardian" } }
+    }) + reviewStarted("turn-new", "2026-06-12T01:02:00.000Z")
+  );
+
+  const events = [];
+  const watcher = watchCodexGuardianReviews({
+    sessionsRoot: root,
+    cwd: "D:\\Work\\project",
+    startedAt: Date.parse("2026-06-12T01:00:00.000Z"),
+    onReviewEvent: (event) => events.push(event),
+    ...noopTimers
+  });
+
+  watcher._tick();
+
+  assert.deepEqual(events, [{ type: "review_started" }]);
+
+  watcher.stop();
+});
+
 test("watchCodexGuardianReviews emits nothing without a classifiable main session", () => {
   const { root, dir } = makeSessionsRoot();
   // Guardian trunk exists but there is no main rollout to bind its parent to.

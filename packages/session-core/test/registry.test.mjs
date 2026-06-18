@@ -65,6 +65,60 @@ test("applies state and heartbeat messages without losing session metadata", () 
   assert.equal(session.projectName, "project");
 });
 
+test("ignores late state messages older than the latest accepted state", () => {
+  const registry = createSessionRegistry();
+
+  registry.applyMessage(registerMessage("sess_a"));
+  registry.applyMessage({
+    type: "state",
+    sessionId: "sess_a",
+    state: "interrupted",
+    summary: "interrupted",
+    confidence: 0.9,
+    source: "client_log",
+    updatedAt: 2000
+  });
+  registry.applyMessage({
+    type: "state",
+    sessionId: "sess_a",
+    state: "thinking",
+    confidence: 0.9,
+    source: "official_plugin",
+    updatedAt: 1500
+  });
+
+  const session = registry.getSession("sess_a");
+  assert.equal(session.state, "interrupted");
+  assert.equal(session.summary, "interrupted");
+  assert.equal(session.source, "client_log");
+  assert.equal(session.updatedAt, 2000);
+});
+
+test("heartbeats do not block later-delivered state messages", () => {
+  const registry = createSessionRegistry();
+
+  registry.applyMessage(registerMessage("sess_a"));
+  registry.applyMessage({
+    type: "heartbeat",
+    sessionId: "sess_a",
+    updatedAt: 3000
+  });
+  registry.applyMessage({
+    type: "state",
+    sessionId: "sess_a",
+    state: "running_tool",
+    summary: "shell_command",
+    confidence: 0.85,
+    source: "client_log",
+    updatedAt: 2000
+  });
+
+  const session = registry.getSession("sess_a");
+  assert.equal(session.state, "running_tool");
+  assert.equal(session.summary, "shell_command");
+  assert.equal(session.updatedAt, 3000);
+});
+
 test("unregister marks sessions as exited and preserves exit details", () => {
   const registry = createSessionRegistry();
 

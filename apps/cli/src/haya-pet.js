@@ -426,6 +426,7 @@ async function runRunCommand(parsed, dependencies) {
       const watcher = watchCodexTranscript({
         homeDir: dependencies.homeDir,
         sessionsRoot: dependencies.codexSessionsRoot,
+        cwd,
         startedAt: now(),
         onToolEvent: (event) => {
           hookDebugLog(env, now, {
@@ -507,6 +508,7 @@ async function runRunCommand(parsed, dependencies) {
       const guardianWatcher = watchCodexGuardianReviews({
         homeDir: dependencies.homeDir,
         sessionsRoot: dependencies.codexSessionsRoot,
+        cwd,
         startedAt: now(),
         onReviewEvent: (event) => {
           hookDebugLog(env, now, {

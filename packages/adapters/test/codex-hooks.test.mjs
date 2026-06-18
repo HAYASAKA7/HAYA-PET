@@ -25,6 +25,12 @@ test("mapCodexEventToState branches PreToolUse on tool name (apply_patch vs comm
   assert.equal(mapCodexEventToState("PreToolUse", "read_file"), "running_tool");
 });
 
+test("mapCodexEventToState branches PostCompact on compaction trigger", () => {
+  assert.equal(mapCodexEventToState("PostCompact", "manual"), "idle");
+  assert.equal(mapCodexEventToState("PostCompact", "auto"), "thinking");
+  assert.equal(mapCodexEventToState("PostCompact"), "thinking");
+});
+
 test("Stop is the only idle signal — SubagentStop stays working", () => {
   // Regression guard for the key Codex-vs-Claude difference: a subagent finishing
   // mid-turn must NOT flip the pet to idle.
@@ -62,6 +68,15 @@ test("buildCodexHookSettings splits PreToolUse into edit + command matchers", ()
   const other = pre.find((e) => /running_tool/.test(e.hooks[0].command));
   assert.equal(edit.matcher, "apply_patch");
   assert.equal(other.matcher, "shell_command");
+});
+
+test("buildCodexHookSettings splits PostCompact into manual + auto triggers", () => {
+  const post = buildCodexHookSettings({ nodePath: "n", cliPath: "c" }).hooks.PostCompact;
+  assert.equal(post.length, 2);
+  const manual = post.find((e) => e.matcher === "manual");
+  const auto = post.find((e) => e.matcher === "auto");
+  assert.match(manual.hooks[0].command, /state idle --summary compacted$/);
+  assert.match(auto.hooks[0].command, /state thinking --summary compacted$/);
 });
 
 test("buildCodexHookSettings routes PermissionRequest through the Codex reporter", () => {

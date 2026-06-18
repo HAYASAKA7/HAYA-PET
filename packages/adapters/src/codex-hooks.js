@@ -43,8 +43,11 @@
 //    while manual/unknown reviewer config reports waiting_approval. The guardian
 //    fires NO hooks itself (SubAgentSource::Other is excluded from Subagent
 //    hooks), so the wrapper also tails the guardian rollout directly.
-//  - UNTESTED: PreCompact / SubagentStart|Stop (no compaction / subagent
-//    occurred in the probe).
+//  - PreCompact / PostCompact trigger split follows the same manual/auto matcher
+//    shape as Claude. A manual `/compact` returns to a prompt, while auto compact
+//    happens mid-turn and should resume the pet's working state.
+//  - UNTESTED: PreCompact / SubagentStart|Stop live firing (no compaction /
+//    subagent occurred in the probe).
 //
 // OPEN QUESTION (injection): unlike `claude --settings <file>`, Codex has no
 // per-invocation settings-file flag. Candidate non-mutating paths, best first:
@@ -70,8 +73,9 @@ const EDIT_TOOLS_MATCHER = EDIT_TOOLS.join("|");
 const COMMAND_TOOLS_MATCHER = "shell_command";
 
 // The hook table. Each entry → one Codex hook that reports a fixed pet state.
-// `matcher` (when present) filters PreToolUse by tool name. `summary` is an
-// optional short label shown in the bubble and in HAYA_PET_HOOK_DEBUG logs.
+// `matcher` (when present) filters PreToolUse by tool name or PostCompact by
+// compaction trigger. `summary` is an optional short label shown in the bubble and
+// in HAYA_PET_HOOK_DEBUG logs.
 const HOOK_TABLE = Object.freeze([
   { event: "UserPromptSubmit", state: "thinking" },
   { event: "PreToolUse", matcher: EDIT_TOOLS_MATCHER, state: "editing_files" },
@@ -79,7 +83,8 @@ const HOOK_TABLE = Object.freeze([
   { event: "PostToolUse", state: "thinking" },
   { event: "PermissionRequest", command: "codex-permission-request" },
   { event: "PreCompact", state: "compacting" },
-  { event: "PostCompact", state: "thinking", summary: "compacted" },
+  { event: "PostCompact", matcher: "manual", state: "idle", summary: "compacted" },
+  { event: "PostCompact", matcher: "auto", state: "thinking", summary: "compacted" },
   // A subagent finishing is mid-turn — the main agent keeps working, so this is
   // NOT idle. Turn-end is the dedicated `Stop` event below.
   { event: "SubagentStart", state: "running_tool", summary: "subagent" },
@@ -87,11 +92,15 @@ const HOOK_TABLE = Object.freeze([
   { event: "Stop", state: "idle" }
 ]);
 
-// Resolve the pet state for a Codex event. `toolName` is the tool for PreToolUse.
-// Exposed for testing and to keep the mapping in one place.
-export function mapCodexEventToState(event, toolName) {
+// Resolve the pet state for a Codex event. `detail` is the tool for PreToolUse or
+// the compaction trigger for PostCompact. Exposed for testing and to keep the
+// mapping in one place.
+export function mapCodexEventToState(event, detail) {
   if (event === "PreToolUse") {
-    return EDIT_TOOLS.includes(toolName) ? "editing_files" : "running_tool";
+    return EDIT_TOOLS.includes(detail) ? "editing_files" : "running_tool";
+  }
+  if (event === "PostCompact") {
+    return detail === "manual" ? "idle" : "thinking";
   }
   const entry = HOOK_TABLE.find((row) => row.event === event && row.matcher === undefined);
   return entry?.state;

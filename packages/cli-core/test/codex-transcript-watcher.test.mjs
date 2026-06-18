@@ -7,11 +7,11 @@ import { discoverCodexTranscript, watchCodexTranscript } from "../src/codex-tran
 
 const noopTimers = { setInterval: () => ({}), clearInterval: () => {} };
 
-function sessionMeta(timestamp, id = "thread-1") {
+function sessionMeta(timestamp, id = "thread-1", cwd) {
   return `${JSON.stringify({
     timestamp,
     type: "session_meta",
-    payload: { id, parent_thread_id: null, source: "cli", thread_source: "user" }
+    payload: { id, parent_thread_id: null, source: "cli", thread_source: "user", ...(cwd ? { cwd } : {}) }
   })}\n`;
 }
 
@@ -148,6 +148,37 @@ test("watchCodexTranscript ignores fresh writes to sessions that started before 
   watcher._tick();
 
   assert.deepEqual(events, []);
+
+  watcher.stop();
+});
+
+test("watchCodexTranscript follows a fresh resumed session in the same cwd", () => {
+  const root = mkdtempSync(join(tmpdir(), "codex-sessions-"));
+  const dir = join(root, "2026", "06", "08");
+  mkdirSync(dir, { recursive: true });
+  const path = join(dir, "rollout-resumed.jsonl");
+  writeFileSync(
+    path,
+    [
+      sessionMeta("2026-06-08T10:00:00.000Z", "resumed-thread", "D:\\Work\\project"),
+      turnAborted("2026-06-08T11:00:01.000Z")
+    ].join("")
+  );
+  const fresh = new Date("2026-06-08T11:00:01.500Z");
+  utimesSync(path, fresh, fresh);
+
+  const events = [];
+  const watcher = watchCodexTranscript({
+    sessionsRoot: root,
+    cwd: "D:\\Work\\project",
+    startedAt: Date.parse("2026-06-08T11:00:00.000Z"),
+    onToolEvent: (event) => events.push(event),
+    ...noopTimers
+  });
+
+  watcher._tick();
+
+  assert.deepEqual(events, [{ type: "turn_aborted", reason: "interrupted" }]);
 
   watcher.stop();
 });

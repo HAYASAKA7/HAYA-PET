@@ -2,7 +2,7 @@
 
 Issues found in live use, with their current status.
 
-## ⏳ In progress: Codex interrupt sometimes leaves the pet "working"
+## ✅ Resolved: Codex interrupt sometimes left the pet "working"
 
 - **Symptom:** Pressing Esc to interrupt a Codex turn occasionally does **not**
   flip the pet to *interrupted* — it keeps showing a working state (*thinking* /
@@ -12,18 +12,32 @@ Issues found in live use, with their current status.
   live `~/.codex/sessions`, **zero** had a tool result after the abort. Codex
   fires no hook on an abort, and the L3 transcript watcher does record
   `turn_aborted` and emit `interrupted`.
-- **Leading suspect:** The daemon registry applies session state **last-writer-
-  wins by IPC arrival order** (`registry.js` `applyState` ignores `updatedAt` and
-  `confidence`). Hooks (separate `haya-pet state` subprocesses) and the interrupt
-  watcher use different IPC connections, so a stale "working" message can arrive
-  *after* `interrupted` and clobber it. Discovery edges (a resumed session whose
-  `session_meta.timestamp` predates the wrapper launch is filtered out; concurrent
-  Codex sessions can attach the watcher to the wrong rollout) are secondary
-  candidates.
-- **Status:** Instrumented with a daemon-side arrival trace (`HAYA_PET_DAEMON_DEBUG`,
-  in `apps/companion/src/main/index.js`) to confirm whether `interrupted` is never
-  emitted (watcher/discovery) vs. emitted-then-clobbered (arrival-order race).
-  **Fix to follow shortly** — likely an `updatedAt`-monotonic guard in `applyState`.
+- **Root cause:** The daemon registry applied session state **last-writer-wins by
+  IPC arrival order** (`registry.js` `applyState` ignored state ordering). Hooks
+  (separate `haya-pet state` subprocesses) and the interrupt watcher use different
+  IPC connections, so a stale "working" message could arrive *after*
+  `interrupted` and clobber it.
+- **Fix:** The registry now keeps a separate per-session state timestamp and ignores
+  state messages older than the latest accepted state. Heartbeats still update
+  liveness independently, so a newer heartbeat cannot block a legitimate
+  later-delivered state message.
+- **Follow-up root cause:** Immediate Esc after prompt submit still failed in
+  **resumed** Codex sessions. `UserPromptSubmit` fired and set *thinking*, and
+  Codex wrote a normal `turn_aborted` record, but the watcher rejected the rollout
+  because `session_meta.timestamp` was from the original session start, before the
+  HAYA wrapper launch. The transcript watcher now allows a fresh rollout from the
+  wrapped cwd, preserving the old guard against unrelated stale sessions while
+  covering resumed sessions.
+- **Other affected case checked:** The Codex guardian-review watcher had the same
+  resumed-session shape. It matched guardian trunks by the main thread id, but the
+  old resumed main rollout could be rejected before that id was accepted. It now
+  uses the same fresh-mtime + wrapped-cwd rule for resumed main sessions, so
+  "Approve for me" review status is not lost after a Codex resume.
+- **How to diagnose if it recurs:** Set `HAYA_PET_DAEMON_DEBUG=<path>` before
+  launching the companion. The companion writes daemon-arrival JSONL for
+  non-heartbeat messages. If `interrupted` never appears, the issue is in
+  transcript discovery/watching; if `interrupted` appears before a stale
+  hook-sourced working state, it is an ordering regression.
 
 ## ✅ Resolved: Claude pet stuck on "compacting" after a compaction
 
@@ -112,9 +126,11 @@ Issues found in live use, with their current status.
   Another already-running Codex session could keep writing fresh records after
   HAYA Pet started, making its rollout look like the wrapped session even though
   it began earlier.
-- **Fix:** Both watchers now inspect the first `session_meta` line and require
-  its timestamp to belong to this wrapper launch. Old-but-active Codex sessions
-  are ignored even if their files continue to receive fresh writes.
+- **Fix:** Both watchers inspect the first `session_meta` line and require either
+  a timestamp that belongs to this wrapper launch, or a fresh rollout whose cwd
+  matches the wrapped Codex cwd for resumed sessions. Old-but-active Codex
+  sessions from unrelated projects are ignored even if their files continue to
+  receive fresh writes.
 
 ## ✅ Resolved: Codex `/quit` hung on its goodbye (and the pet kept showing "working")
 

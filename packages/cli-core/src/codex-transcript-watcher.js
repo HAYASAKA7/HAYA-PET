@@ -12,6 +12,7 @@ const MTIME_SKEW_MS = 2000;
 export function watchCodexTranscript(options = {}) {
   const {
     homeDir = process.env.USERPROFILE || process.env.HOME,
+    cwd,
     startedAt = 0,
     onToolEvent = () => {},
     pollIntervalMs = DEFAULT_POLL_MS,
@@ -31,7 +32,7 @@ export function watchCodexTranscript(options = {}) {
   const tick = () => {
     try {
       if (!transcriptPath) {
-        transcriptPath = discoverCodexTranscript(root, minMtime);
+        transcriptPath = discoverCodexTranscript(root, minMtime, { cwd });
         if (!transcriptPath) {
           return;
         }
@@ -78,21 +79,29 @@ export function watchCodexTranscript(options = {}) {
   };
 }
 
-export function discoverCodexTranscript(root, minMtime = 0) {
+export function discoverCodexTranscript(root, minMtime = 0, options = {}) {
   if (!root || !existsSync(root)) {
     return undefined;
   }
 
+  const expectedCwd = normalizePathForCompare(options.cwd);
   let newest;
   for (const file of listJsonlFiles(root)) {
     const mtime = safeMtime(file);
     if (mtime < minMtime) {
       continue;
     }
-    const sessionStartedAt = readCodexSessionStartedAt(file);
-    if (!Number.isFinite(sessionStartedAt) || sessionStartedAt < minMtime) {
+    const meta = readCodexSessionMeta(file);
+    if (!meta) {
       continue;
     }
+
+    const isFreshSession = meta.startedAt >= minMtime;
+    const isFreshResume = expectedCwd !== undefined && normalizePathForCompare(meta.cwd) === expectedCwd;
+    if (!isFreshSession && !isFreshResume) {
+      continue;
+    }
+
     if (!newest || mtime > newest.mtime) {
       newest = { file, mtime };
     }
@@ -100,7 +109,7 @@ export function discoverCodexTranscript(root, minMtime = 0) {
   return newest?.file;
 }
 
-function readCodexSessionStartedAt(file) {
+function readCodexSessionMeta(file) {
   const line = readFirstLine(file);
   if (line === undefined) {
     return undefined;
@@ -118,5 +127,19 @@ function readCodexSessionStartedAt(file) {
   }
 
   const timestampMs = Date.parse(entry.timestamp);
-  return Number.isFinite(timestampMs) ? timestampMs : undefined;
+  if (!Number.isFinite(timestampMs)) {
+    return undefined;
+  }
+
+  return {
+    startedAt: timestampMs,
+    cwd: typeof entry.payload?.cwd === "string" ? entry.payload.cwd : undefined
+  };
+}
+
+function normalizePathForCompare(value) {
+  if (typeof value !== "string" || value.trim() === "") {
+    return undefined;
+  }
+  return value.trim().replace(/\\/g, "/").replace(/\/+$/g, "").toLowerCase();
 }

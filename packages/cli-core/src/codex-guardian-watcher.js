@@ -21,6 +21,7 @@ const MTIME_SKEW_MS = 2000;
 export function watchCodexGuardianReviews(options = {}) {
   const {
     homeDir = process.env.USERPROFILE || process.env.HOME,
+    cwd,
     startedAt = 0,
     onReviewEvent = () => {},
     pollIntervalMs = DEFAULT_POLL_MS,
@@ -31,6 +32,7 @@ export function watchCodexGuardianReviews(options = {}) {
 
   const root = sessionsRoot ?? (homeDir ? join(homeDir, ".codex", "sessions") : undefined);
   const minMtime = startedAt > 0 ? startedAt - MTIME_SKEW_MS : 0;
+  const expectedCwd = normalizePathForCompare(cwd);
 
   // session_meta classifications are immutable once written, so cache them by
   // path. A file with no complete first line yet is NOT cached — it is retried
@@ -50,8 +52,13 @@ export function watchCodexGuardianReviews(options = {}) {
       return undefined;
     }
     const meta = classifyCodexSessionMeta(firstLine) ?? null;
-    const sessionStartedAt = readSessionMetaTimestamp(firstLine);
-    if (meta && minMtime > 0 && (!Number.isFinite(sessionStartedAt) || sessionStartedAt < minMtime)) {
+    const sessionMeta = readSessionMeta(firstLine);
+    const isFreshSession = sessionMeta && sessionMeta.startedAt >= minMtime;
+    const isFreshResume =
+      meta?.kind === "main" &&
+      expectedCwd !== undefined &&
+      normalizePathForCompare(sessionMeta?.cwd) === expectedCwd;
+    if (meta && minMtime > 0 && !isFreshSession && !isFreshResume) {
       metaByPath.set(file, null);
       return null;
     }
@@ -140,7 +147,7 @@ export function watchCodexGuardianReviews(options = {}) {
   };
 }
 
-function readSessionMetaTimestamp(line) {
+function readSessionMeta(line) {
   let entry;
   try {
     entry = JSON.parse(line);
@@ -153,5 +160,19 @@ function readSessionMetaTimestamp(line) {
   }
 
   const timestampMs = Date.parse(entry.timestamp);
-  return Number.isFinite(timestampMs) ? timestampMs : undefined;
+  if (!Number.isFinite(timestampMs)) {
+    return undefined;
+  }
+
+  return {
+    startedAt: timestampMs,
+    cwd: typeof entry.payload?.cwd === "string" ? entry.payload.cwd : undefined
+  };
+}
+
+function normalizePathForCompare(value) {
+  if (typeof value !== "string" || value.trim() === "") {
+    return undefined;
+  }
+  return value.trim().replace(/\\/g, "/").replace(/\/+$/g, "").toLowerCase();
 }

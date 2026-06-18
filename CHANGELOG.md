@@ -7,7 +7,7 @@ All notable changes to HAYA Pet are documented here. This project adheres to
 > 0.2.0 npm publish; they are listed under 0.2.1, which is the first version that
 > ships them.
 
-## [0.3.5]
+## [0.3.6]
 
 ### Fixed
 - **The pet no longer gets stuck on "compacting" in Claude Code.** `PreCompact`
@@ -19,21 +19,31 @@ All notable changes to HAYA Pet are documented here. This project adheres to
   an **auto** compaction (context filled mid-turn) resumes to *thinking* and the
   next real event refines from there. Mirrors Codex, which already handled
   `PostCompact`.
+- **Codex interrupts no longer get clobbered by stale working states.** The Codex
+  transcript watcher already detected `turn_aborted` and emitted
+  *interrupted*, but the daemon registry applied state by IPC arrival order. A
+  slower hook reporter could therefore deliver an older *thinking* / *running*
+  state after the interrupt and overwrite it. The registry now keeps a separate
+  per-session state timestamp and ignores state messages older than the latest
+  accepted state, while heartbeats still update liveness independently.
+- **Codex immediate interrupts in resumed sessions are detected.** In a resumed
+  Codex session, `session_meta.timestamp` stays at the original session start.
+  The prompt-start hook could still set the pet to *thinking*, but the transcript
+  watcher rejected the old rollout before it could see the immediately appended
+  `turn_aborted`. The watcher now also follows a fresh rollout from the wrapped
+  cwd, so resumed sessions can report interrupts while unrelated old sessions
+  remain filtered.
+- **Codex auto-review status works in resumed sessions too.** The guardian-review
+  watcher had the same old-`session_meta.timestamp` filter as the transcript
+  watcher, so a resumed main rollout could be rejected before the guardian trunk
+  was matched to it. The guardian watcher now uses the same fresh-mtime + wrapped
+  cwd rule for resumed main sessions before following the guardian review trunk.
 
 ### Added
 - **`HAYA_PET_DAEMON_DEBUG` diagnostic.** When set to a file path, the companion
   appends one JSONL line per incoming non-heartbeat message in daemon **arrival
   order** (with `updatedAt`), making out-of-order state delivery observable. Added
-  to investigate the Codex interrupt issue below.
-
-### Known issues
-- **Codex interrupt can still leave the pet "working".** On some interrupts the
-  pet keeps a working state instead of *interrupted*. The transcript watcher does
-  record `turn_aborted` (the "a late tool result resets it" theory was ruled out
-  across 257 real aborts), so the suspect is the daemon applying state by IPC
-  **arrival order**, letting a stale "working" message land after *interrupted*.
-  Instrumented via `HAYA_PET_DAEMON_DEBUG`; **fix to follow shortly.** See
-  `docs/known-issues.md`.
+  to investigate state-order races such as the Codex interrupt issue.
 
 ## [0.3.4]
 

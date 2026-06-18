@@ -11,6 +11,7 @@ export function createSessionRegistry(options = {}) {
 class SessionRegistry {
   constructor(options) {
     this.sessions = new Map();
+    this.lastStateUpdatedAt = new Map();
     this.staleAfterMs = options.staleAfterMs ?? DEFAULT_STALE_AFTER_MS;
     this.dropAfterMs = options.dropAfterMs ?? DEFAULT_DROP_AFTER_MS;
   }
@@ -58,6 +59,7 @@ class SessionRegistry {
       // real update — marking stale must NOT bump updatedAt, or it never elapses.
       if (now - session.updatedAt > this.dropAfterMs) {
         this.sessions.delete(sessionId);
+        this.lastStateUpdatedAt.delete(sessionId);
         continue;
       }
 
@@ -70,6 +72,7 @@ class SessionRegistry {
         session.source = "wrapper";
         session.confidence = 0.3;
         session.summary = "heartbeat stale";
+        this.lastStateUpdatedAt.set(sessionId, now);
         staleSessions.push(snapshotSession(session));
       }
     }
@@ -93,6 +96,7 @@ class SessionRegistry {
     };
 
     this.sessions.set(message.sessionId, session);
+    this.lastStateUpdatedAt.set(message.sessionId, message.startedAt);
     return snapshotSession(session);
   }
 
@@ -104,10 +108,17 @@ class SessionRegistry {
 
   applyState(message) {
     const session = this.requireSession(message.sessionId);
+    const lastStateUpdatedAt = this.lastStateUpdatedAt.get(message.sessionId) ?? session.startedAt;
+
+    if (message.updatedAt < lastStateUpdatedAt) {
+      return snapshotSession(session);
+    }
+
+    this.lastStateUpdatedAt.set(message.sessionId, message.updatedAt);
     session.state = message.state;
     session.confidence = message.confidence;
     session.source = message.source;
-    session.updatedAt = message.updatedAt;
+    session.updatedAt = Math.max(session.updatedAt, message.updatedAt);
 
     if (Object.prototype.hasOwnProperty.call(message, "summary")) {
       session.summary = message.summary;
@@ -126,6 +137,7 @@ class SessionRegistry {
     session.exitCode = message.exitCode;
     session.finishedAt = message.finishedAt;
     session.updatedAt = message.finishedAt;
+    this.lastStateUpdatedAt.set(message.sessionId, message.finishedAt);
     return snapshotSession(session);
   }
 
