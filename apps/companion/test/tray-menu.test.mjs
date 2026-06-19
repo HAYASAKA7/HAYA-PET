@@ -13,9 +13,11 @@ const baseState = {
 test("includes the documented recovery controls", () => {
   const menu = buildTrayMenu(baseState);
   const ids = menu.map((item) => item.id);
-  for (const id of ["toggle_pet", "display_mode", "sessions", "pets", "attach_bubbles", "reset_position", "quit"]) {
+  for (const id of ["toggle_pet", "sessions", "pets", "reset_position", "quit"]) {
     assert.ok(ids.includes(id), `missing ${id}`);
   }
+  assert.ok(!ids.includes("display_mode"), "display mode should stay hidden until implemented");
+  assert.ok(!ids.includes("attach_bubbles"), "attach bubbles should stay hidden until implemented");
   // "Open Settings" is parked until a settings window exists (every current
   // setting already has a tray/CLI/gesture home) — it must not be shown dead.
   assert.ok(!ids.includes("settings"), "settings item should stay hidden until implemented");
@@ -26,25 +28,12 @@ test("toggles the pet label based on visibility", () => {
   assert.equal(buildTrayMenu({ ...baseState, petVisible: false }).find((i) => i.id === "toggle_pet").label, "Show Pet");
 });
 
-test("checks the current display mode in the submenu", () => {
-  const submenu = buildTrayMenu(baseState).find((i) => i.id === "display_mode").submenu;
-  const hybrid = submenu.find((i) => i.value === "hybrid");
-  const global = submenu.find((i) => i.value === "global");
-  assert.equal(hybrid.checked, true);
-  assert.equal(global.checked, false);
-});
-
 test("lists active sessions or shows an empty placeholder", () => {
   const withSessions = buildTrayMenu(baseState).find((i) => i.id === "sessions").submenu;
   assert.equal(withSessions[0].label, "Codex · netdisk-server");
 
   const empty = buildTrayMenu({ ...baseState, sessions: [] }).find((i) => i.id === "sessions").submenu;
   assert.equal(empty[0].enabled, false);
-});
-
-test("reflects the attach-bubbles checkbox state", () => {
-  assert.equal(buildTrayMenu(baseState).find((i) => i.id === "attach_bubbles").checked, true);
-  assert.equal(buildTrayMenu({ ...baseState, attachBubblesToTerminals: false }).find((i) => i.id === "attach_bubbles").checked, false);
 });
 
 test("shows the update item only when a newer version is known", () => {

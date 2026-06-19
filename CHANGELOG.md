@@ -7,6 +7,14 @@ All notable changes to HAYA Pet are documented here. This project adheres to
 > 0.2.0 npm publish; they are listed under 0.2.1, which is the first version that
 > ships them.
 
+## [0.3.7]
+
+### Changed
+- **The tray menu no longer shows state-only controls.** Hidden **Display Mode**
+  and **Attach Bubbles to Terminals** until those settings have real runtime
+  behavior. **Active Sessions** stays visible while session actions continue in a
+  separate workflow.
+
 ## [0.3.6]
 
 ### Fixed
@@ -38,6 +46,12 @@ All notable changes to HAYA Pet are documented here. This project adheres to
   watcher, so a resumed main rollout could be rejected before the guardian trunk
   was matched to it. The guardian watcher now uses the same fresh-mtime + wrapped
   cwd rule for resumed main sessions before following the guardian review trunk.
+- **Codex hook review is one-time again.** Codex stores approved hook hashes in
+  the generated `$CODEX_HOME/haya-pet.config.toml` profile under `[hooks.state]`.
+  The injector used to rewrite the whole managed profile on every launch, deleting
+  that trust state and forcing Codex to ask for hook review every time. The
+  injector now preserves Codex's hook trust tables while regenerating the HAYA
+  hook definitions.
 
 ### Added
 - **`HAYA_PET_DAEMON_DEBUG` diagnostic.** When set to a file path, the companion

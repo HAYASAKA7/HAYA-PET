@@ -2,13 +2,6 @@
 // converts these descriptors into a native Menu; keeping it pure makes the
 // recovery controls testable.
 
-const DISPLAY_MODES = Object.freeze([
-  { value: "global", label: "Global" },
-  { value: "cluster", label: "Cluster" },
-  { value: "per-terminal", label: "Per Terminal" },
-  { value: "hybrid", label: "Hybrid" }
-]);
-
 export function buildTrayTooltip() {
   return "HAYA Pet";
 }
@@ -23,17 +16,6 @@ export function buildTrayMenu(state = {}) {
       label: state.petVisible ? "Hide Pet" : "Show Pet"
     },
     {
-      id: "display_mode",
-      label: "Display Mode",
-      submenu: DISPLAY_MODES.map((mode) => ({
-        id: `display_mode:${mode.value}`,
-        label: mode.label,
-        value: mode.value,
-        type: "radio",
-        checked: state.displayMode === mode.value
-      }))
-    },
-    {
       id: "sessions",
       label: "Active Sessions",
       submenu: buildSessionItems(sessions)
@@ -43,17 +25,9 @@ export function buildTrayMenu(state = {}) {
       label: "Installed Pets",
       submenu: buildPetItems(pets, state.selectedPetId)
     },
-    {
-      id: "attach_bubbles",
-      label: "Attach Bubbles to Terminals",
-      type: "checkbox",
-      checked: Boolean(state.attachBubblesToTerminals)
-    },
     { id: "reset_position", label: "Reset Position" },
-    // Parked until a real settings window exists: every current setting already
-    // has a home (tray toggles, `haya-pet hooks`, drag/grip gestures), so the
-    // item would be a dead button. Re-enable once settings outgrow the tray
-    // (e.g. bubble text size, linger duration) and a handler is wired up.
+    // Parked until a real settings window exists; partially implemented knobs
+    // stay hidden instead of showing dead or state-only controls.
     // { id: "settings", label: "Open Settings" },
     // Only present when the daily npm update check found a newer version;
     // clicking it opens the package page (the app never runs npm itself).

@@ -8,7 +8,7 @@
 // across sessions so Codex's hook-trust review only needs approving once. fnm hands
 // out a per-shell symlink for process.execPath that dies when the launching shell
 // exits, so we realpath it before baking it into the hook command.
-import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -32,7 +32,8 @@ export function injectCodexHooks({ nodePath, cliPath, codexHome, env = process.e
   // rewrite identical bytes, and the hooks stay "trusted" across launches.
   mkdirSync(home, { recursive: true });
   const profilePath = join(home, PROFILE_FILE);
-  writeFileSync(profilePath, toml, "utf8");
+  const trustedState = readCodexHookTrustState(profilePath);
+  writeFileSync(profilePath, appendCodexHookTrustState(toml, trustedState), "utf8");
 
   // The profile file is stable and reusable on purpose — leaving it in place is
   // what lets Codex remember the hooks are trusted. cleanup is a no-op kept for
@@ -46,4 +47,52 @@ function safeRealpath(target) {
   } catch {
     return target;
   }
+}
+
+function readCodexHookTrustState(profilePath) {
+  try {
+    return extractCodexHookTrustState(readFileSync(profilePath, "utf8"));
+  } catch {
+    return "";
+  }
+}
+
+function appendCodexHookTrustState(toml, trustedState) {
+  if (!trustedState) {
+    return toml;
+  }
+  return `${toml.trimEnd()}\n\n${trustedState.trim()}\n`;
+}
+
+function extractCodexHookTrustState(toml) {
+  const lines = String(toml).split(/\r?\n/);
+  const output = [];
+  let inHookState = false;
+
+  for (const line of lines) {
+    const tableName = readTomlTableName(line);
+    if (tableName) {
+      const isHookStateTable = tableName === "hooks.state" || tableName.startsWith("hooks.state.");
+      if (isHookStateTable) {
+        inHookState = true;
+      } else if (inHookState) {
+        break;
+      }
+    }
+
+    if (inHookState) {
+      output.push(line);
+    }
+  }
+
+  return output.join("\n").trim();
+}
+
+function readTomlTableName(line) {
+  const table = /^\s*\[([^\]]+)\]\s*$/.exec(line);
+  if (table) {
+    return table[1];
+  }
+  const arrayTable = /^\s*\[\[([^\]]+)\]\]\s*$/.exec(line);
+  return arrayTable?.[1];
 }

@@ -136,7 +136,7 @@ success or failure briefly, then fades.
 | Global pet | Reacts to the highest-priority session and can be dragged anywhere. |
 | Session bubbles | One bubble per running AI session, ordered by connect time. |
 | Folder button | Folds the bubbles away when you want a cleaner desktop. |
-| Tray menu | Show/hide, display mode, installed pets, reset position, and quit. |
+| Tray menu | Show/hide, active sessions, installed pets, reset position, updates, and quit. |
 | Resize grip | Hover the pet, drag the corner, and keep the size you like. |
 
 ## Screenshots
@@ -144,7 +144,7 @@ success or failure briefly, then fades.
 | | |
 |---|---|
 | **The global pet** - reacting to the highest-priority session.<br>![Pet overlay](docs/screenshots/pet-overlay.png) | **Session bubbles** - one per active session, with status icons.<br>![Session bubbles](docs/screenshots/session-bubbles.png) |
-| **Folder collapsed** - bubbles tucked away beside the pet.<br>![Folder collapsed](docs/screenshots/folder-collapsed.png) | **Tray menu** - show/hide, pets, reset position, quit.<br>![Tray menu](docs/screenshots/tray-menu.png) |
+| **Folder collapsed** - bubbles tucked away beside the pet.<br>![Folder collapsed](docs/screenshots/folder-collapsed.png) | **Tray menu** - show/hide, sessions, pets, reset position, quit.<br>![Tray menu](docs/screenshots/tray-menu.png) |
 
 ## Supported Clients
 
@@ -217,7 +217,7 @@ non-observe mode keeps terminal input native.
 | Drag | Move the pet; position is saved. |
 | Drag corner grip | Resize from 0.5x to 2x; size is saved. |
 | Double-click grip | Reset to normal size. |
-| Tray icon | Open menu for display, sessions, pets, reset, and quit. |
+| Tray icon | Open menu for sessions, pets, reset, updates, and quit. |
 
 ## Commands
 

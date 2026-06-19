@@ -117,6 +117,20 @@ Issues found in live use, with their current status.
   surfaces as turn-end *idle*). The TUI's passive `/approve` denial-override
   picker is not a blocking prompt.
 
+## ✅ Resolved: Codex asked to review HAYA hooks on every launch
+
+- **Symptom:** Even after approving HAYA Pet's Codex hooks once, every new
+  `haya-pet run --client codex` showed Codex's hook review prompt again.
+- **Root cause:** HAYA Pet correctly wrote a stable
+  `$CODEX_HOME/haya-pet.config.toml` profile, but Codex stores the user's hook
+  trust decisions back into that same profile under `[hooks.state]` as
+  `trusted_hash` entries. The injector rewrote the entire profile on every
+  launch, so it deleted Codex's trust cache before Codex could reuse it.
+- **Fix:** The Codex hook injector now regenerates the HAYA-managed hook tables
+  while preserving the Codex-managed `[hooks.state]` tables from the existing
+  profile. Users may need to approve once after updating; after that, unchanged
+  hook commands should stay trusted.
+
 ## ✅ Resolved: Codex pet looked busy immediately after startup
 
 - **Symptom:** Starting a wrapped Codex session and doing nothing could still make
