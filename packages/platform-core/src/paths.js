@@ -30,6 +30,7 @@ function getWindowsPaths(env, homeDir) {
     statePath: joinWindows(localAppData, "haya-pet", "state.json"),
     configPath: joinWindows(appData, "haya-pet", "config.json"),
     logDir: joinWindows(localAppData, "haya-pet", "logs"),
+    sessionDir: joinWindows(localAppData, "haya-pet", "sessions"),
     petSearchPaths: [
       joinWindows(homeDir, ".codex", "pets"),
       joinWindows(localAppData, "haya-pet", "pets")
@@ -44,6 +45,7 @@ function getUnixPaths(homeDir) {
     statePath: joinUnix(homeDir, ".haya-pet", "state.json"),
     configPath: joinUnix(homeDir, ".haya-pet", "config.json"),
     logDir: joinUnix(homeDir, ".haya-pet", "logs"),
+    sessionDir: joinUnix(homeDir, ".haya-pet", "sessions"),
     petSearchPaths: [
       joinUnix(homeDir, ".codex", "pets"),
       joinUnix(homeDir, ".haya-pet", "pets")
@@ -58,6 +60,7 @@ function getUnsupportedPaths(homeDir) {
     statePath: joinUnix(homeDir, ".haya-pet", "state.json"),
     configPath: joinUnix(homeDir, ".haya-pet", "config.json"),
     logDir: joinUnix(homeDir, ".haya-pet", "logs"),
+    sessionDir: joinUnix(homeDir, ".haya-pet", "sessions"),
     petSearchPaths: [
       joinUnix(homeDir, ".codex", "pets"),
       joinUnix(homeDir, ".haya-pet", "pets")

@@ -7,6 +7,32 @@ All notable changes to HAYA Pet are documented here. This project adheres to
 > 0.2.0 npm publish; they are listed under 0.2.1, which is the first version that
 > ships them.
 
+## [0.3.8]
+
+### Fixed
+- **An interrupt or denial in one Claude Code session no longer leaks into a
+  concurrent, idle one.** The transcript watcher discovered its file by "newest
+  `.jsonl` by mtime in the project dir", so two Claude sessions in the same folder
+  (one project dir, one transcript each) could make an idle session's watcher lock
+  onto a *busy* session's transcript — then read its `[Request interrupted by
+  user]` marker (or a denial) and report the wrong pet as *interrupted*. Each
+  session's watcher now pins to its own transcript via the `transcript_path` Claude
+  includes in every hook payload (recorded as a per-session link by the `haya-pet
+  state` reporter) instead of guessing; until that link exists it idles rather than
+  locking onto another session's file. Codex shares the same discovery shape and is
+  tracked as a known issue.
+- **The pet no longer disappears when the display layout changes.** The overlay
+  window's bounds were set once at creation to span one display's work area and
+  never re-homed, so unplugging a monitor, changing resolution/DPI, docking or
+  undocking, or waking from sleep could strand it off-screen (or on a display that
+  no longer exists) — the pet vanished while the process kept running, and neither
+  **Show/Hide Pet** (which only flips visibility) nor **Reset Position** (which only
+  moved the sprite *inside* the window) brought it back. The companion now re-homes
+  the overlay onto a valid display on `screen` display add/remove/metrics-change and
+  on resume from sleep, and **Reset Position** / **Show Pet** / relaunch re-home the
+  window itself. Automatic re-homes preserve the preferred display, so the pet
+  returns there when the monitor comes back.
+
 ## [0.3.7]
 
 ### Changed

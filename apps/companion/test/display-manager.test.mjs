@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "../../../test/harness.mjs";
-import { clampWindowBounds, resolveSavedPosition } from "../src/main/display-manager.js";
+import {
+  clampLocalToWorkArea,
+  clampWindowBounds,
+  resolveOverlayPlacement,
+  resolveSavedPosition
+} from "../src/main/display-manager.js";
 
 const displays = [
   {
@@ -44,5 +49,50 @@ test("uses primary display when no saved position exists", () => {
   assert.deepEqual(
     resolveSavedPosition(undefined, displays, { width: 384, height: 416 }),
     { x: 416, y: 144, width: 384, height: 416, displayId: "primary", scaleFactor: 1.25 }
+  );
+});
+
+test("resolveOverlayPlacement spans the saved display and places the sprite inside it", () => {
+  assert.deepEqual(
+    resolveOverlayPlacement({
+      savedPosition: { x: 900, y: 120, width: 192, height: 208, displayId: "secondary" },
+      displays,
+      petSize: { width: 192, height: 208 }
+    }),
+    {
+      workArea: { x: 820, y: 20, width: 1160, height: 840 },
+      displayId: "secondary",
+      petLocal: { x: 80, y: 100 } // 900-820, 120-20
+    }
+  );
+});
+
+test("resolveOverlayPlacement re-homes a stranded position onto a valid display", () => {
+  // The pet was last on a display that is now gone (monitor unplugged). It must
+  // come back on the primary display, fully inside its work area — this is the
+  // recovery the disappear-and-can't-restore bug needed.
+  assert.deepEqual(
+    resolveOverlayPlacement({
+      savedPosition: { x: 4000, y: 4000, width: 192, height: 208, displayId: "gone" },
+      displays,
+      petSize: { width: 192, height: 208 }
+    }),
+    {
+      workArea: { x: 0, y: 0, width: 800, height: 560 },
+      displayId: "primary",
+      petLocal: { x: 608, y: 352 } // clamped to primary work area (800-192, 560-208)
+    }
+  );
+});
+
+test("clampLocalToWorkArea keeps the sprite within the work area for its size", () => {
+  const workArea = { x: 0, y: 0, width: 800, height: 560 };
+  assert.deepEqual(
+    clampLocalToWorkArea({ x: 5000, y: 5000 }, workArea, { width: 192, height: 208 }),
+    { x: 608, y: 352 }
+  );
+  assert.deepEqual(
+    clampLocalToWorkArea({ x: -50, y: -50 }, workArea, { width: 192, height: 208 }),
+    { x: 0, y: 0 }
   );
 });

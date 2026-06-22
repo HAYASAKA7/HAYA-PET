@@ -5,7 +5,8 @@ import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runGenericCommand as defaultRunGenericCommand } from "../../../packages/cli-core/src/run-command.js";
-import { parseStateArgs, runStateCommand } from "../../../packages/cli-core/src/run-state.js";
+import { parseStateArgs, runStateCommand, readHookTranscriptPathFromStdin } from "../../../packages/cli-core/src/run-state.js";
+import { removeSessionTranscriptLink } from "../../../packages/cli-core/src/session-transcript-link.js";
 import { injectClaudeHooks as defaultInjectClaudeHooks } from "../../../packages/cli-core/src/claude-hook-injection.js";
 import { injectCodexHooks as defaultInjectCodexHooks } from "../../../packages/cli-core/src/codex-hook-injection.js";
 import { watchClaudeTranscript as defaultWatchClaudeTranscript } from "../../../packages/cli-core/src/claude-transcript-watcher.js";
@@ -353,6 +354,12 @@ async function runRunCommand(parsed, dependencies) {
     childEnv = { ...env, HAYA_PET_SESSION_ID: sessionId };
     cleanup = injected.cleanup;
 
+    // The transcript watcher pins to THIS session's transcript via the
+    // session->transcript link the `haya-pet state` reporter writes from the hook
+    // payload. sessionDir is where that link lives; resolve it defensively so a
+    // missing home dir (tests) never breaks the run.
+    const sessionDir = resolveSessionDir(dependencies, env);
+
     // Claude fires NO hook when the user manually denies a permission, so the
     // pet would stay stuck on "waiting for approval". Tail the session transcript
     // (ground truth) and clear to idle the moment a denial is recorded — never on
@@ -361,6 +368,8 @@ async function runRunCommand(parsed, dependencies) {
       cwd,
       homeDir: dependencies.homeDir,
       startedAt: now(),
+      sessionId,
+      sessionDir,
       onDenial: (event) => {
         hookDebugLog(env, now, { source: "transcript", event: "denied", state: "idle", toolUseId: event?.toolUseId });
         messageSender
@@ -392,7 +401,10 @@ async function runRunCommand(parsed, dependencies) {
           .catch(() => {});
       }
     });
-    stopWatcher = watcher.stop;
+    stopWatcher = () => {
+      watcher.stop();
+      removeSessionTranscriptLink({ sessionDir, sessionId });
+    };
   }
 
   // Codex: no `--settings` equivalent, so inject a stable profile and add
@@ -622,6 +634,21 @@ function createConfigStateFile(dependencies) {
   });
   const createStateFile = dependencies.createStateFile ?? defaultCreateStateFile;
   return createStateFile({ statePath: paths.statePath });
+}
+
+// Where per-session transcript links live. Resolved defensively: if no home dir
+// is available (some tests), return undefined and the watcher falls back to its
+// legacy discovery instead of crashing the run.
+function resolveSessionDir(dependencies, env) {
+  try {
+    return getDefaultPaths({
+      platform: dependencies.platform,
+      env,
+      homeDir: dependencies.homeDir
+    }).sessionDir;
+  } catch {
+    return undefined;
+  }
 }
 
 // Best-effort: mirror the reporter's HAYA_PET_HOOK_DEBUG log so transcript-driven
@@ -917,7 +944,7 @@ async function noopSend() {}
 async function noopClose() {}
 
 if (isDirectRun(import.meta.url, process.argv[1])) {
-  main()
+  bootstrap()
     .catch((error) => {
       console.error(error.message);
       process.exitCode = 1;
@@ -928,6 +955,28 @@ if (isDirectRun(import.meta.url, process.argv[1])) {
       // alive after the child exits.
       process.exit(process.exitCode ?? 0);
     });
+}
+
+// Real-process entry. For a `haya-pet state` invocation — which is ALWAYS a client
+// hook child — read the hook payload from stdin once to learn this session's real
+// transcript path, and hand it to the reporter so it can record the
+// session->transcript link. Done here (not inside main/runStateCommand) so unit
+// tests, and every other command that needs stdin passed through to its child
+// (e.g. `run`), never touch stdin.
+async function bootstrap() {
+  const argv = process.argv.slice(2);
+  const dependencies = {};
+  if (argv[0] === "state") {
+    try {
+      const transcriptPath = await readHookTranscriptPathFromStdin();
+      if (transcriptPath) {
+        dependencies.transcriptPath = transcriptPath;
+      }
+    } catch {
+      // a missing/garbled payload just means no binding this time — never fatal
+    }
+  }
+  return main(argv, dependencies);
 }
 
 function isDirectRun(moduleUrl, scriptPath) {

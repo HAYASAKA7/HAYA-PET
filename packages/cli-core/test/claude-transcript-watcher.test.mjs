@@ -8,6 +8,7 @@ import {
   discoverTranscript,
   watchClaudeTranscript
 } from "../src/claude-transcript-watcher.js";
+import { writeSessionTranscriptLink } from "../src/session-transcript-link.js";
 
 const noopTimers = { setInterval: () => ({}), clearInterval: () => {} };
 
@@ -124,6 +125,78 @@ test("watchClaudeTranscript handles a line split across two appends", () => {
   appendFileSync(path, full.slice(mid));
   watcher._tick();
   assert.deepEqual(denials, [{ type: "tool_denied", toolUseId: "toolu_split" }]);
+
+  watcher.stop();
+});
+
+test("watchClaudeTranscript pins to the session's linked transcript, not newest-by-mtime", () => {
+  // Two concurrent sessions share one project dir. Each has its own link.
+  const projectDir = mkdtempSync(join(tmpdir(), "proj-"));
+  const sessionDir = mkdtempSync(join(tmpdir(), "sess-"));
+  const fileA = join(projectDir, "a.jsonl");
+  const fileB = join(projectDir, "b.jsonl");
+  writeFileSync(fileA, "");
+  writeFileSync(fileB, "");
+  writeSessionTranscriptLink({ sessionDir, sessionId: "sess_a", transcriptPath: fileA });
+  writeSessionTranscriptLink({ sessionDir, sessionId: "sess_b", transcriptPath: fileB });
+
+  const interruptsA = [];
+  const interruptsB = [];
+  const watcherA = watchClaudeTranscript({
+    sessionId: "sess_a",
+    sessionDir,
+    onInterrupt: (e) => interruptsA.push(e),
+    ...noopTimers
+  });
+  const watcherB = watchClaudeTranscript({
+    sessionId: "sess_b",
+    sessionDir,
+    onInterrupt: (e) => interruptsB.push(e),
+    ...noopTimers
+  });
+
+  // Both pin to their own file, then skip to EOF.
+  watcherA._tick();
+  watcherB._tick();
+
+  // Interrupt happens in session A only.
+  appendFileSync(fileA, interrupt());
+  watcherA._tick();
+  watcherB._tick();
+
+  assert.deepEqual(interruptsA, [{ type: "interrupted" }], "session A sees its own interrupt");
+  assert.deepEqual(interruptsB, [], "session B (idle) is NOT contaminated by session A's interrupt");
+
+  watcherA.stop();
+  watcherB.stop();
+});
+
+test("watchClaudeTranscript with a session link idles until the link appears", () => {
+  const sessionDir = mkdtempSync(join(tmpdir(), "sess-"));
+  const projectDir = mkdtempSync(join(tmpdir(), "proj-"));
+  const file = join(projectDir, "s.jsonl");
+  writeFileSync(file, "");
+
+  const interrupts = [];
+  const watcher = watchClaudeTranscript({
+    sessionId: "sess_late",
+    sessionDir,
+    onInterrupt: (e) => interrupts.push(e),
+    ...noopTimers
+  });
+
+  // No link yet → nothing tailed, even if a marker is already present.
+  appendFileSync(file, interrupt());
+  watcher._tick();
+  assert.deepEqual(interrupts, [], "no guessing before the hook reports the path");
+
+  // The hook fires and records the binding; the watcher now pins (skipping to EOF,
+  // so the pre-existing marker is not replayed) and only catches NEW events.
+  writeSessionTranscriptLink({ sessionDir, sessionId: "sess_late", transcriptPath: file });
+  watcher._tick();
+  appendFileSync(file, interrupt());
+  watcher._tick();
+  assert.deepEqual(interrupts, [{ type: "interrupted" }]);
 
   watcher.stop();
 });

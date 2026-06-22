@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, nativeImage, screen, shell, Tray } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, nativeImage, powerMonitor, screen, shell, Tray } from "electron";
 import { fileURLToPath } from "node:url";
 import { appendFileSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -14,7 +14,7 @@ import { getPlatformCapabilities } from "../../../../packages/platform-core/src/
 import { buildBubbleViews } from "../../../../packages/session-core/src/bubble-view.js";
 import { clampScale } from "../../../../packages/pet-core/src/pet-scale.js";
 import { buildPetWindowOptions, PET_SIZE } from "./window-options.js";
-import { resolveSavedPosition } from "./display-manager.js";
+import { clampLocalToWorkArea, resolveOverlayPlacement } from "./display-manager.js";
 import { getPetScale, setPetScale, setSelectedPet, updateGlobalPetPosition } from "./position-store.js";
 import { buildTrayMenu, buildTrayTooltip } from "./tray-menu.js";
 import { createStateFile } from "./state-file.js";
@@ -151,6 +151,7 @@ async function bootstrap() {
   createPetWindow();
   createTray();
   registerRendererHandlers();
+  registerDisplayWatchers();
   // Best-effort and cached in state.json (shared with the CLI's check, so at
   // most one registry request per day between them); never blocks startup.
   void detectUpdate();
@@ -171,16 +172,9 @@ async function bootstrap() {
 }
 
 function createPetWindow() {
-  const displays = listDisplays();
-  // Resolve the pet's saved on-screen position (pet-sized), which also tells us
-  // which display it belongs on. The window then spans that display's work area.
-  const saved = resolveSavedPosition(positionState.globalPet, displays);
-  const display = displays.find((d) => d.id === saved.displayId)
-    ?? displays.find((d) => d.primary)
-    ?? displays[0];
-  currentWorkArea = display.workArea ?? display.bounds;
-  currentDisplayId = display.id;
-  petLocal = clampPetLocal({ x: saved.x - currentWorkArea.x, y: saved.y - currentWorkArea.y });
+  // Resolve which display the pet belongs on and where it sits inside that
+  // display's work area; the window then spans that work area.
+  applyOverlayPlacement(resolveCurrentPlacement());
 
   const { browserWindow } = buildPetWindowOptions({ capabilities, bounds: currentWorkArea });
 
@@ -214,13 +208,69 @@ function scaledPetSize() {
 }
 
 function clampPetLocal(local) {
+  return clampLocalToWorkArea(local ?? petLocal, currentWorkArea, scaledPetSize());
+}
+
+// Resolve where the overlay should sit right now, given the saved position and the
+// CURRENT set of displays. Used at startup and on every re-home.
+function resolveCurrentPlacement() {
+  return resolveOverlayPlacement({
+    savedPosition: positionState.globalPet,
+    displays: listDisplays(),
+    petSize: scaledPetSize()
+  });
+}
+
+// Adopt a resolved placement into the module's window/pet state (does NOT move the
+// BrowserWindow — callers decide whether to create or setBounds).
+function applyOverlayPlacement(placement) {
+  currentWorkArea = placement.workArea;
+  currentDisplayId = placement.displayId;
+  petLocal = placement.petLocal;
+}
+
+// Re-home the overlay onto a currently-valid display and re-assert its bounds.
+// A display change (monitor unplugged, resolution/DPI change, dock/undock,
+// sleep→resume) can strand the window off-screen on a display that no longer
+// exists: the pet "vanishes" while the process is alive, and neither Show/Hide
+// nor Reset (which only move the sprite INSIDE the window) bring it back. This is
+// the one operation that puts the window itself back on screen.
+function rehomeOverlay({ recenter = false, persist = true } = {}) {
+  if (!petWindow || petWindow.isDestroyed()) {
+    return;
+  }
+
+  applyOverlayPlacement(resolveCurrentPlacement());
+  if (recenter) {
+    petLocal = cornerPetLocal();
+  }
+
+  try {
+    petWindow.setBounds(currentWorkArea);
+  } catch (error) {
+    // Setting bounds must never crash the overlay; the next display event retries.
+    console.error("overlay re-home failed:", error.message);
+  }
+  if (!petWindow.isVisible()) {
+    petWindow.show();
+  }
+  sendPetPosition();
+  // Automatic re-homes (display change / resume) deliberately do NOT persist, so
+  // the user's preferred display is preserved and the pet returns there once that
+  // display comes back. User-initiated re-homes (reset/show) persist as usual.
+  if (persist) {
+    persistPetPosition();
+  }
+}
+
+// Bottom-right corner of the current work area (the Reset target).
+function cornerPetLocal() {
+  const margin = 24;
   const size = scaledPetSize();
-  const maxX = Math.max(0, (currentWorkArea?.width ?? size.width) - size.width);
-  const maxY = Math.max(0, (currentWorkArea?.height ?? size.height) - size.height);
-  return {
-    x: Math.min(Math.max(local.x ?? 0, 0), maxX),
-    y: Math.min(Math.max(local.y ?? 0, 0), maxY)
-  };
+  return clampPetLocal({
+    x: (currentWorkArea?.width ?? size.width) - size.width - margin,
+    y: (currentWorkArea?.height ?? size.height) - size.height - margin
+  });
 }
 
 function createTray() {
@@ -348,6 +398,22 @@ function handleTrayClick(item) {
   }
 }
 
+// The overlay window is positioned once at creation; without these it would never
+// react to the display layout changing under it. Re-home on any display add/remove/
+// metrics change, and on resume from sleep (which commonly fires a metrics change
+// and, on Windows, can blank a transparent surface — re-asserting bounds repaints).
+function registerDisplayWatchers() {
+  const onDisplayChange = () => rehomeOverlay({ persist: false });
+  screen.on("display-metrics-changed", onDisplayChange);
+  screen.on("display-added", onDisplayChange);
+  screen.on("display-removed", onDisplayChange);
+  try {
+    powerMonitor.on("resume", onDisplayChange);
+  } catch {
+    // powerMonitor is unavailable on some platforms/headless; never fatal.
+  }
+}
+
 function registerRendererHandlers() {
   ipcMain.handle("haya-pet:list-sessions", () => buildSessionPayload());
 
@@ -441,24 +507,27 @@ function togglePet() {
   if (!petWindow) {
     return;
   }
-  petWindow.isVisible() ? petWindow.hide() : petWindow.show();
+  if (petWindow.isVisible()) {
+    petWindow.hide();
+  } else {
+    // Re-home on show: a stranded (off-screen) window still reports isVisible()
+    // === true, so the user's first click hides it and this second click must put
+    // it back on a valid display, not just show it at the same bad bounds.
+    rehomeOverlay();
+  }
   refreshTrayMenu();
 }
 
 function focusPet() {
-  petWindow?.show();
+  // Relaunching `haya-pet` (second-instance) is also a "bring it back" gesture, so
+  // re-home rather than show at possibly-stale bounds.
+  rehomeOverlay();
 }
 
 function resetPosition() {
-  // Drop the pet back to the bottom-right corner of its work area.
-  const margin = 24;
-  const size = scaledPetSize();
-  petLocal = clampPetLocal({
-    x: (currentWorkArea?.width ?? size.width) - size.width - margin,
-    y: (currentWorkArea?.height ?? size.height) - size.height - margin
-  });
-  sendPetPosition();
-  persistPetPosition();
+  // Re-home onto a valid display FIRST (a stale display layout is exactly when
+  // users reach for Reset), then drop the pet to the bottom-right corner.
+  rehomeOverlay({ recenter: true });
 }
 
 function setDisplayMode(displayMode) {

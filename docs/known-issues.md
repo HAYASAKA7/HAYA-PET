@@ -2,6 +2,107 @@
 
 Issues found in live use, with their current status.
 
+## 🔲 Open: cross-session status contamination on Codex
+
+- **Symptom (same class as the resolved Claude entry below):** interrupting one
+  Codex session can flip a **different, concurrent** Codex session's pet to
+  *interrupted* (and more generally mirror another session's tool/working
+  states). Most likely when two Codex sessions run in the **same folder** and one
+  is busy while the other is idle. Not yet fixed.
+- **Root cause:** `discoverCodexTranscript` (`codex-transcript-watcher.js`) picks
+  the rollout by **newest `.jsonl` by mtime**, filtered only by
+  `session_meta.cwd` / freshness — it does **not** bind to a specific session, so
+  an idle session's watcher can lock onto a busy session's rollout and then read
+  that session's `turn_aborted` (Codex's interrupt signal) as its own. The rollout
+  *does* identify itself (`session_meta.payload.id` = the Codex thread id, plus a
+  unique per-session filename), but (1) we never learn **which** thread id belongs
+  to the session our wrapper launched — the Codex hooks pass only
+  `HAYA_PET_SESSION_ID` via env and the reporter currently **discards Codex's hook
+  stdin** — and (2) the watcher matches on mtime+cwd, not on that id. The
+  `isFreshSession` branch even admits recently-started rollouts from **other
+  cwds**, so the exposure is slightly *wider* than Claude's (which is scoped to one
+  project dir). This is the residual same-session-folder case the earlier
+  "Codex pet looked busy immediately after startup" fix narrowed but did not
+  eliminate.
+- **Plan (handle later):** port the Claude binding to Codex. Verify against the
+  live Codex CLI whether the hook **stdin payload** carries the rollout path or
+  the thread id (`session_id`); if so, have the `haya-pet state` reporter record a
+  per-session session→rollout link (reusing `session-transcript-link.js`) and pin
+  the watcher to it — or, failing that, match `session_meta.payload.id` once we
+  can learn our session's id. Fall back to current behavior when no identifier is
+  available. No timer, consistent with the rest of the status model.
+- **Status:** unfixed. The binding fix shipped this session is **Claude-only** and
+  does not touch the Codex watcher or the guardian-review watcher (which shares the
+  same discovery shape and should be checked alongside it).
+
+## ✅ Resolved: Claude interrupt/denial leaked into a concurrent idle session
+
+- **Symptom:** With Claude Code hooks enabled, interrupting (Esc) one Claude
+  session could also flip a **different, idle** Claude session's pet to
+  *interrupted* (and mirror its working states). Intermittent — most visible when
+  the two ran in the **same folder** and one was busy while the other sat idle.
+- **Root cause:** the L3 transcript watcher had **no binding to a specific
+  session's transcript**. It discovered the file by "newest `.jsonl` by mtime in
+  the project dir" (`claude-transcript-watcher.js` `discoverTranscript`). Two
+  Claude sessions in one folder share a project dir
+  (`~/.claude/projects/<sanitized-cwd>/`), each with its own UUID file, so an idle
+  session's watcher could lock onto a **busy** session's transcript and then read
+  that session's `[Request interrupted by user]` marker (or a denial) and report
+  it for itself. `HAYA_PET_SESSION_ID` identified the session to the daemon, but
+  nothing tied the watched **file** to the session.
+- **Fix:** bind each watcher to its own transcript via the **`transcript_path`
+  Claude includes in every hook payload** (ground truth). The `haya-pet state`
+  reporter — already a hook child that knows `HAYA_PET_SESSION_ID` — reads the hook
+  payload from stdin (only in the real process entry, never in tests/other
+  commands) and records a per-session **session→transcript link**
+  (`packages/cli-core/src/session-transcript-link.js`, stored under
+  `…/haya-pet/sessions/<id>.json`). The watcher pins to that exact file instead of
+  guessing; until the link exists it simply idles (nothing to interrupt yet)
+  rather than locking onto another session's file. Newest-by-mtime remains only as
+  a fallback for the no-session case (never hit in production, where the watcher
+  only runs with hooks on). The link is removed on wrapper exit. Local-only and
+  best-effort; **no timer** is involved.
+- **Tests:** `session-transcript-link.test.mjs` (write/read round-trip + per-session
+  isolation) and a `claude-transcript-watcher.test.mjs` case proving an interrupt
+  in session A is **not** reported for idle session B, plus a case that the watcher
+  idles until its link appears.
+- **How to diagnose if it recurs:** with `HAYA_PET_HOOK_DEBUG=<path>` set, the
+  transcript-sourced `interrupted` line is logged with its `sessionId`; if it
+  appears under a session that was idle, the binding (the
+  `…/haya-pet/sessions/<id>.json` link) resolved to the wrong file.
+
+## ✅ Resolved: pet disappeared (and could not be restored) after a display change
+
+- **Symptom:** the pet sometimes vanished from the screen while the companion was
+  still running — and once gone, **Show/Hide Pet** and **Reset Position** both
+  failed to bring it back. Intermittent.
+- **Root cause:** the overlay is a single full-work-area `BrowserWindow` whose
+  bounds are computed **once**, at creation, for whichever display it resolved to
+  then. The companion subscribed to **no** `screen` events and never called
+  `setBounds` again, so a display-layout change underneath it — monitor unplugged,
+  resolution/DPI change, dock/undock, or sleep→resume — left the window at
+  coordinates that were now **off-screen or on a display that no longer exists**.
+  The window stayed alive and `isVisible() === true`; it was just painting where no
+  monitor covered. The two recovery actions failed for the same reason: *Show/Hide*
+  only flips `isVisible()` (an off-screen window is already "visible", so it
+  toggled between hidden and shown-at-the-same-bad-bounds), and *Reset Position*
+  only moved the **sprite's CSS position inside** the overlay (against a stale work
+  area), never the window's bounds.
+- **Fix:** the companion now re-homes the overlay onto a currently-valid display.
+  It listens for `screen` `display-metrics-changed` / `display-added` /
+  `display-removed` and `powerMonitor` `resume`, re-resolving the target display
+  and calling `setBounds` (decision logic in the pure, tested
+  `display-manager.js` `resolveOverlayPlacement`). **Reset Position**, **Show
+  Pet**, and relaunch now re-home the window itself, not just the sprite.
+  Automatic re-homes do **not** persist the position, so the user's preferred
+  display is remembered and the pet returns there when that monitor comes back. No
+  timer is involved — every re-home is driven by a real display/power event or a
+  user action.
+- **Known residual (Windows):** a transparent surface can still occasionally go
+  blank after resume even with correct bounds (an Electron compositor issue);
+  re-asserting bounds repaints it in the common case, and a hide/show repaint nudge
+  is the fallback if it recurs.
+
 ## ✅ Resolved: Codex interrupt sometimes left the pet "working"
 
 - **Symptom:** Pressing Esc to interrupt a Codex turn occasionally does **not**

@@ -3,7 +3,8 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "../../../test/harness.mjs";
-import { parseStateArgs, runStateCommand } from "../src/run-state.js";
+import { extractTranscriptPath, parseStateArgs, runStateCommand } from "../src/run-state.js";
+import { readSessionTranscriptLink } from "../src/session-transcript-link.js";
 
 test("runStateCommand appends a debug line when HAYA_PET_HOOK_DEBUG is set", async () => {
   const logPath = join(mkdtempSync(join(tmpdir(), "haya-dbg-")), "hooks.jsonl");
@@ -19,6 +20,51 @@ test("runStateCommand appends a debug line when HAYA_PET_HOOK_DEBUG is set", asy
 
   const line = JSON.parse(readFileSync(logPath, "utf8").trim());
   assert.deepEqual(line, { ts: 7, state: "waiting_approval", sessionId: "s1", summary: "approval" });
+});
+
+test("extractTranscriptPath pulls transcript_path out of a Claude hook payload", () => {
+  assert.equal(
+    extractTranscriptPath(JSON.stringify({ session_id: "x", transcript_path: "/p/a.jsonl", cwd: "/p" })),
+    "/p/a.jsonl"
+  );
+  // Defensive: junk, missing field, wrong type, and empty all yield undefined.
+  assert.equal(extractTranscriptPath("{not json"), undefined);
+  assert.equal(extractTranscriptPath(JSON.stringify({ session_id: "x" })), undefined);
+  assert.equal(extractTranscriptPath(JSON.stringify({ transcript_path: 42 })), undefined);
+  assert.equal(extractTranscriptPath(""), undefined);
+  assert.equal(extractTranscriptPath(undefined), undefined);
+});
+
+test("runStateCommand records the session->transcript link when given a transcript path", async () => {
+  const sessionDir = mkdtempSync(join(tmpdir(), "sess-"));
+  await runStateCommand(
+    { command: "state", state: "thinking", summary: undefined, session: "sess_link" },
+    {
+      now: () => 1,
+      sessionDir,
+      transcriptPath: "/p/.claude/projects/D--p/abc.jsonl",
+      createIpcClient: async () => ({ send: async () => {}, close: async () => {} })
+    }
+  );
+
+  assert.equal(
+    readSessionTranscriptLink({ sessionDir, sessionId: "sess_link" }),
+    "/p/.claude/projects/D--p/abc.jsonl"
+  );
+});
+
+test("runStateCommand writes no link when no transcript path is supplied", async () => {
+  const sessionDir = mkdtempSync(join(tmpdir(), "sess-"));
+  await runStateCommand(
+    { command: "state", state: "thinking", summary: undefined, session: "sess_nolink" },
+    {
+      now: () => 1,
+      sessionDir,
+      createIpcClient: async () => ({ send: async () => {}, close: async () => {} })
+    }
+  );
+
+  assert.equal(readSessionTranscriptLink({ sessionDir, sessionId: "sess_nolink" }), undefined);
 });
 
 test("parseStateArgs reads state, summary, and session", () => {

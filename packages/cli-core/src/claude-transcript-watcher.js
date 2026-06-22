@@ -15,6 +15,7 @@ import {
 } from "node:fs";
 import { basename, join } from "node:path";
 import { parseTranscriptLines } from "../../adapters/src/claude-transcript.js";
+import { readSessionTranscriptLink } from "./session-transcript-link.js";
 
 const DEFAULT_POLL_MS = 700;
 
@@ -37,6 +38,8 @@ export function watchClaudeTranscript(options = {}) {
     onInterrupt = () => {},
     pollIntervalMs = DEFAULT_POLL_MS,
     projectsRoot,
+    sessionId,
+    sessionDir,
     transcriptPath: fixedPath,
     setInterval: setIntervalFn = setInterval,
     clearInterval: clearIntervalFn = clearInterval
@@ -47,6 +50,13 @@ export function watchClaudeTranscript(options = {}) {
   // before Claude has created THIS session's transcript.
   const minMtime = startedAt > 0 ? startedAt - MTIME_SKEW_MS : 0;
 
+  // Preferred resolution: pin to the exact transcript this session's hook reported
+  // (via the session->transcript link). Only when no session identity is available
+  // (e.g. hooks off, or older tests) do we fall back to the newest-by-mtime guess —
+  // which is unsafe with multiple concurrent sessions in one folder. In production
+  // the watcher only runs with hooks on, so the link path is always used.
+  const useLink = Boolean(sessionId && sessionDir);
+
   let transcriptPath = fixedPath;
   let offset = 0;
   let carry = "";
@@ -54,7 +64,9 @@ export function watchClaudeTranscript(options = {}) {
   const tick = () => {
     try {
       if (!transcriptPath) {
-        transcriptPath = discoverTranscript(root, cwd, minMtime);
+        transcriptPath = useLink
+          ? resolveLinkedTranscript(sessionDir, sessionId)
+          : discoverTranscript(root, cwd, minMtime);
         if (!transcriptPath) {
           return;
         }
@@ -104,6 +116,18 @@ export function watchClaudeTranscript(options = {}) {
     // Exposed so tests can drive ticks deterministically.
     _tick: tick
   };
+}
+
+// Resolve the transcript this session's hook bound itself to. Returns undefined
+// until the link exists and points at a real file, so before the first hook fires
+// the watcher simply idles (there is nothing to interrupt yet) rather than
+// guessing a file that might belong to another session.
+function resolveLinkedTranscript(sessionDir, sessionId) {
+  const linked = readSessionTranscriptLink({ sessionDir, sessionId });
+  if (!linked || !existsSync(linked)) {
+    return undefined;
+  }
+  return linked;
 }
 
 export function discoverTranscript(root, cwd, minMtime = 0) {
