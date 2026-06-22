@@ -14,6 +14,7 @@ import {
   parseGuardianTranscriptLines
 } from "../../adapters/src/codex-guardian.js";
 import { listJsonlFiles, readFirstLine, readRange, safeMtime, safeSize } from "./codex-rollout-fs.js";
+import { readSessionTranscriptLink } from "./session-transcript-link.js";
 
 const DEFAULT_POLL_MS = 700;
 const MTIME_SKEW_MS = 2000;
@@ -26,6 +27,8 @@ export function watchCodexGuardianReviews(options = {}) {
     onReviewEvent = () => {},
     pollIntervalMs = DEFAULT_POLL_MS,
     sessionsRoot,
+    sessionId,
+    sessionDir,
     setInterval: setIntervalFn = setInterval,
     clearInterval: clearIntervalFn = clearInterval
   } = options;
@@ -66,7 +69,33 @@ export function watchCodexGuardianReviews(options = {}) {
     return meta;
   };
 
+  // Authoritative main thread id from the session->transcript link (the linked
+  // rollout's session_meta.payload.id). Lets the guardian bind to OUR main thread
+  // even when another session's main rollout has a newer mtime.
+  const resolveLinkedMainThreadId = () => {
+    if (!sessionId || !sessionDir) {
+      return undefined;
+    }
+    const linked = readSessionTranscriptLink({ sessionDir, sessionId });
+    if (!linked) {
+      return undefined;
+    }
+    const firstLine = readFirstLine(linked);
+    if (firstLine === undefined) {
+      return undefined;
+    }
+    const meta = classifyCodexSessionMeta(firstLine);
+    return meta?.kind === "main" ? meta.threadId : undefined;
+  };
+
   const discoverTrunk = () => {
+    // Prefer the linked main thread id; fall back to the newest main rollout by
+    // mtime only when no link is available (older behavior, unsafe across
+    // concurrent same-cwd sessions).
+    if (!mainThreadId) {
+      mainThreadId = resolveLinkedMainThreadId();
+    }
+
     let newestMain;
     let newestTrunk;
 
@@ -83,8 +112,12 @@ export function watchCodexGuardianReviews(options = {}) {
       if (meta.kind === "main" && meta.threadId && (!newestMain || mtime > newestMain.mtime)) {
         newestMain = { threadId: meta.threadId, mtime };
       }
-      if (meta.kind === "guardian" && (!newestTrunk || mtime > newestTrunk.mtime)) {
-        newestTrunk = { file, parentThreadId: meta.parentThreadId, mtime };
+      if (meta.kind === "guardian" && meta.parentThreadId && (!newestTrunk || mtime > newestTrunk.mtime)) {
+        // Once our main thread id is known, only consider OUR trunk so a
+        // concurrent session's (or collab subagent's) newer trunk cannot win.
+        if (!mainThreadId || meta.parentThreadId === mainThreadId) {
+          newestTrunk = { file, parentThreadId: meta.parentThreadId, mtime };
+        }
       }
     }
 

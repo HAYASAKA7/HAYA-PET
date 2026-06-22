@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "../../../test/harness.mjs";
 import { discoverCodexTranscript, watchCodexTranscript } from "../src/codex-transcript-watcher.js";
+import { writeSessionTranscriptLink } from "../src/session-transcript-link.js";
 
 const noopTimers = { setInterval: () => ({}), clearInterval: () => {} };
 
@@ -58,6 +59,55 @@ test("discoverCodexTranscript skips files older than session start", () => {
   utimesSync(oldFile, past, past);
 
   assert.equal(discoverCodexTranscript(root, Date.now() - 1000), undefined);
+});
+
+test("watchCodexTranscript pins to the session's linked rollout, not newest-by-mtime", () => {
+  // Two concurrent Codex sessions, each with its own rollout and its own link.
+  const root = mkdtempSync(join(tmpdir(), "codex-sessions-"));
+  const dir = join(root, "2026", "06", "12");
+  mkdirSync(dir, { recursive: true });
+  const sessionDir = mkdtempSync(join(tmpdir(), "sess-"));
+
+  const fileA = join(dir, "rollout-a.jsonl");
+  const fileB = join(dir, "rollout-b.jsonl");
+  writeFileSync(fileA, sessionMeta("2026-06-12T01:00:00.000Z", "thread-a"));
+  writeFileSync(fileB, sessionMeta("2026-06-12T01:00:00.000Z", "thread-b"));
+  writeSessionTranscriptLink({ sessionDir, sessionId: "sess_a", transcriptPath: fileA });
+  writeSessionTranscriptLink({ sessionDir, sessionId: "sess_b", transcriptPath: fileB });
+
+  const eventsA = [];
+  const eventsB = [];
+  const watcherA = watchCodexTranscript({
+    sessionId: "sess_a",
+    sessionDir,
+    onToolEvent: (e) => eventsA.push(e),
+    ...noopTimers
+  });
+  const watcherB = watchCodexTranscript({
+    sessionId: "sess_b",
+    sessionDir,
+    onToolEvent: (e) => eventsB.push(e),
+    ...noopTimers
+  });
+
+  // Both pin to their own rollout and consume the session_meta line.
+  watcherA._tick();
+  watcherB._tick();
+
+  // Session A is interrupted.
+  appendFileSync(fileA, turnAborted());
+  watcherA._tick();
+  watcherB._tick();
+
+  assert.deepEqual(
+    eventsA,
+    [{ type: "turn_aborted", reason: "interrupted" }],
+    "session A sees its own interrupt"
+  );
+  assert.deepEqual(eventsB, [], "session B is NOT contaminated by session A's interrupt");
+
+  watcherA.stop();
+  watcherB.stop();
 });
 
 test("watchCodexTranscript reports appended tool events", () => {

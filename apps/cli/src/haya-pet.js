@@ -434,12 +434,20 @@ async function runRunCommand(parsed, dependencies) {
       };
       cleanup = injected.cleanup;
 
+      // Pin both Codex watchers to THIS session's rollout via the
+      // session->transcript link the `haya-pet state` reporter records from the
+      // hook payload's transcript_path, instead of guessing newest-by-mtime (which
+      // leaks a concurrent same-cwd session's activity/interrupts).
+      const sessionDir = resolveSessionDir(dependencies, env);
+
       const activeToolCalls = new Set();
       const watcher = watchCodexTranscript({
         homeDir: dependencies.homeDir,
         sessionsRoot: dependencies.codexSessionsRoot,
         cwd,
         startedAt: now(),
+        sessionId,
+        sessionDir,
         onToolEvent: (event) => {
           hookDebugLog(env, now, {
             source: "codex_transcript",
@@ -522,6 +530,8 @@ async function runRunCommand(parsed, dependencies) {
         sessionsRoot: dependencies.codexSessionsRoot,
         cwd,
         startedAt: now(),
+        sessionId,
+        sessionDir,
         onReviewEvent: (event) => {
           hookDebugLog(env, now, {
             source: "codex_guardian",
@@ -550,6 +560,7 @@ async function runRunCommand(parsed, dependencies) {
       stopWatcher = () => {
         guardianWatcher.stop();
         stopWithoutGuardian();
+        removeSessionTranscriptLink({ sessionDir, sessionId });
       };
     }
   }

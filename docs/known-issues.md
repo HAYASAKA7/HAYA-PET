@@ -2,38 +2,34 @@
 
 Issues found in live use, with their current status.
 
-## 🔲 Open: cross-session status contamination on Codex
+## ✅ Resolved: cross-session status contamination on Codex
 
-- **Symptom (same class as the resolved Claude entry below):** interrupting one
-  Codex session can flip a **different, concurrent** Codex session's pet to
-  *interrupted* (and more generally mirror another session's tool/working
-  states). Most likely when two Codex sessions run in the **same folder** and one
-  is busy while the other is idle. Not yet fixed.
-- **Root cause:** `discoverCodexTranscript` (`codex-transcript-watcher.js`) picks
-  the rollout by **newest `.jsonl` by mtime**, filtered only by
-  `session_meta.cwd` / freshness — it does **not** bind to a specific session, so
-  an idle session's watcher can lock onto a busy session's rollout and then read
-  that session's `turn_aborted` (Codex's interrupt signal) as its own. The rollout
-  *does* identify itself (`session_meta.payload.id` = the Codex thread id, plus a
-  unique per-session filename), but (1) we never learn **which** thread id belongs
-  to the session our wrapper launched — the Codex hooks pass only
-  `HAYA_PET_SESSION_ID` via env and the reporter currently **discards Codex's hook
-  stdin** — and (2) the watcher matches on mtime+cwd, not on that id. The
-  `isFreshSession` branch even admits recently-started rollouts from **other
-  cwds**, so the exposure is slightly *wider* than Claude's (which is scoped to one
-  project dir). This is the residual same-session-folder case the earlier
-  "Codex pet looked busy immediately after startup" fix narrowed but did not
-  eliminate.
-- **Plan (handle later):** port the Claude binding to Codex. Verify against the
-  live Codex CLI whether the hook **stdin payload** carries the rollout path or
-  the thread id (`session_id`); if so, have the `haya-pet state` reporter record a
-  per-session session→rollout link (reusing `session-transcript-link.js`) and pin
-  the watcher to it — or, failing that, match `session_meta.payload.id` once we
-  can learn our session's id. Fall back to current behavior when no identifier is
-  available. No timer, consistent with the rest of the status model.
-- **Status:** unfixed. The binding fix shipped this session is **Claude-only** and
-  does not touch the Codex watcher or the guardian-review watcher (which shares the
-  same discovery shape and should be checked alongside it).
+- **Symptom (same class as the Claude entry below):** interrupting one Codex
+  session could flip a **different, concurrent** Codex session's pet to
+  *interrupted* (and more generally mirror another session's tool/working states).
+  Most likely when two Codex sessions ran in the **same folder** and one was busy
+  while the other was idle.
+- **Root cause:** `discoverCodexTranscript` (`codex-transcript-watcher.js`) picked
+  the rollout by **newest `.jsonl` by mtime**, filtered only by `session_meta.cwd`
+  / freshness — it did **not** bind to a specific session, so an idle session's
+  watcher could lock onto a busy session's rollout and read that session's
+  `turn_aborted` (Codex's interrupt signal) as its own. The `isFreshSession` branch
+  even admitted recently-started rollouts from **other cwds**, so the exposure was
+  slightly *wider* than Claude's (scoped to one project dir). The guardian-review
+  watcher had the same flaw: it derived the main thread id from the newest main
+  rollout by mtime, so a concurrent session's review status could be misattributed.
+- **Fix:** the same per-session binding used for Claude. Verified against the
+  OpenAI Codex docs that the command-hook stdin payload carries **`transcript_path`**
+  (and `session_id`, the conversation/rollout id — which I also confirmed on disk
+  equals `session_meta.payload.id` and the rollout filename uuid). The
+  `haya-pet state` reporter already records a per-session `session→transcript` link
+  from that `transcript_path` (the capture is client-agnostic), so the Codex
+  transcript watcher now pins to its own rollout via the link
+  (`session-transcript-link.js`) instead of guessing newest-by-mtime, and the
+  guardian watcher derives the main thread id from the **linked** rollout's
+  `payload.id` (and only considers a trunk whose `parent_thread_id` matches it).
+  Both fall back to the old heuristic when no link is available (e.g. `transcript_path`
+  null early), so there is no regression. No timer involved.
 
 ## ✅ Resolved: Claude interrupt/denial leaked into a concurrent idle session
 

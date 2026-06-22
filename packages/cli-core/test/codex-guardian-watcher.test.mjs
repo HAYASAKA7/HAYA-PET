@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "../../../test/harness.mjs";
 import { watchCodexGuardianReviews } from "../src/codex-guardian-watcher.js";
+import { writeSessionTranscriptLink } from "../src/session-transcript-link.js";
 
 const noopTimers = { setInterval: () => ({}), clearInterval: () => {} };
 
@@ -258,6 +259,53 @@ test("watchCodexGuardianReviews ignores guardian trunks of other parents", () =>
   watcher._tick();
 
   assert.deepEqual(events, []);
+
+  watcher.stop();
+});
+
+test("watchCodexGuardianReviews binds to the LINKED main thread, not the newest main", () => {
+  const { root, dir } = makeSessionsRoot();
+  const sessionDir = mkdtempSync(join(tmpdir(), "sess-"));
+
+  // Our main rollout, and a DIFFERENT concurrent session's main rollout written
+  // afterwards (so it has the newer mtime — what the old heuristic would pick).
+  const ourMain = join(dir, "rollout-main-ours.jsonl");
+  writeFileSync(ourMain, metaLine({ id: "main-ours", parent_thread_id: null, source: "cli", thread_source: "user" }));
+  writeFileSync(
+    join(dir, "rollout-main-other.jsonl"),
+    metaLine({ id: "main-other", parent_thread_id: null, source: "cli", thread_source: "user" })
+  );
+
+  // A guardian trunk for OUR main, plus a decoy trunk for the OTHER main that is
+  // newer and already has a review turn.
+  const ourTrunk = join(dir, "rollout-guardian-ours.jsonl");
+  writeFileSync(
+    ourTrunk,
+    metaLine({ id: "g-ours", parent_thread_id: "main-ours", source: { subagent: { other: "guardian" } } })
+  );
+  writeFileSync(
+    join(dir, "rollout-guardian-other.jsonl"),
+    metaLine({ id: "g-other", parent_thread_id: "main-other", source: { subagent: { other: "guardian" } } }) +
+      reviewStarted("decoy")
+  );
+
+  writeSessionTranscriptLink({ sessionDir, sessionId: "sess_a", transcriptPath: ourMain });
+
+  const events = [];
+  const watcher = watchCodexGuardianReviews({
+    sessionsRoot: root,
+    sessionId: "sess_a",
+    sessionDir,
+    onReviewEvent: (e) => events.push(e),
+    ...noopTimers
+  });
+
+  watcher._tick();
+  assert.deepEqual(events, [], "the newer decoy trunk (another session) is ignored");
+
+  appendFileSync(ourTrunk, reviewStarted());
+  watcher._tick();
+  assert.deepEqual(events, [{ type: "review_started" }], "our trunk is the one tailed");
 
   watcher.stop();
 });

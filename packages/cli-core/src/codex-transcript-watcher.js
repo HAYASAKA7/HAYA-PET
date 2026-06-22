@@ -5,6 +5,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { parseCodexTranscriptLines } from "../../adapters/src/codex-transcript.js";
 import { listJsonlFiles, readFirstLine, readRange, safeMtime, safeSize } from "./codex-rollout-fs.js";
+import { readSessionTranscriptLink } from "./session-transcript-link.js";
 
 const DEFAULT_POLL_MS = 700;
 const MTIME_SKEW_MS = 2000;
@@ -17,6 +18,8 @@ export function watchCodexTranscript(options = {}) {
     onToolEvent = () => {},
     pollIntervalMs = DEFAULT_POLL_MS,
     sessionsRoot,
+    sessionId,
+    sessionDir,
     transcriptPath: fixedPath,
     setInterval: setIntervalFn = setInterval,
     clearInterval: clearIntervalFn = clearInterval
@@ -25,6 +28,13 @@ export function watchCodexTranscript(options = {}) {
   const root = sessionsRoot ?? (homeDir ? join(homeDir, ".codex", "sessions") : undefined);
   const minMtime = startedAt > 0 ? startedAt - MTIME_SKEW_MS : 0;
 
+  // Preferred resolution: pin to the exact rollout this session's hook reported
+  // (Codex puts `transcript_path` in every hook payload; the `haya-pet state`
+  // reporter records it as a session->transcript link). Without that link (e.g.
+  // the path was null early), fall back to the newest-by-mtime heuristic — unsafe
+  // with concurrent same-cwd sessions, which is the bug the link avoids.
+  const useLink = Boolean(sessionId && sessionDir);
+
   let transcriptPath = fixedPath;
   let offset = 0;
   let carry = "";
@@ -32,7 +42,9 @@ export function watchCodexTranscript(options = {}) {
   const tick = () => {
     try {
       if (!transcriptPath) {
-        transcriptPath = discoverCodexTranscript(root, minMtime, { cwd });
+        transcriptPath = useLink
+          ? resolveLinkedRollout(sessionDir, sessionId)
+          : discoverCodexTranscript(root, minMtime, { cwd });
         if (!transcriptPath) {
           return;
         }
@@ -77,6 +89,18 @@ export function watchCodexTranscript(options = {}) {
     },
     _tick: tick
   };
+}
+
+// Resolve the rollout this session's hook bound itself to (via the
+// session->transcript link). Returns undefined until the link exists and points
+// at a real file, so before the first hook the watcher idles rather than guessing
+// a rollout that may belong to another concurrent session.
+function resolveLinkedRollout(sessionDir, sessionId) {
+  const linked = readSessionTranscriptLink({ sessionDir, sessionId });
+  if (!linked || !existsSync(linked)) {
+    return undefined;
+  }
+  return linked;
 }
 
 export function discoverCodexTranscript(root, minMtime = 0, options = {}) {

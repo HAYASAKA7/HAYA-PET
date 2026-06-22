@@ -7,6 +7,23 @@ All notable changes to HAYA Pet are documented here. This project adheres to
 > 0.2.0 npm publish; they are listed under 0.2.1, which is the first version that
 > ships them.
 
+## [0.3.9]
+
+### Fixed
+- **The cross-session contamination fix now covers Codex too.** Codex had the same
+  flaw fixed for Claude in 0.3.8: its transcript watcher chose the rollout by
+  newest mtime + cwd, and the guardian-review watcher derived the main thread id
+  from the newest main rollout — so two Codex sessions in the same folder could
+  cross-report each other's `turn_aborted` (interrupt) or tool activity, with the
+  idle session showing the busy one's state. Codex's command-hook payload also
+  carries `transcript_path`, so the `haya-pet state` reporter's per-session
+  `session → transcript` link (already written for every client) now pins the Codex
+  transcript watcher to its own rollout, and the guardian watcher binds the main
+  thread id from the linked rollout's `payload.id` (and only follows a trunk whose
+  `parent_thread_id` matches it). Both fall back to the previous mtime+cwd heuristic
+  when no link is available (e.g. `transcript_path` null early), so there is no
+  regression. No timer involved.
+
 ## [0.3.8]
 
 ### Fixed
@@ -19,8 +36,8 @@ All notable changes to HAYA Pet are documented here. This project adheres to
   session's watcher now pins to its own transcript via the `transcript_path` Claude
   includes in every hook payload (recorded as a per-session link by the `haya-pet
   state` reporter) instead of guessing; until that link exists it idles rather than
-  locking onto another session's file. Codex shares the same discovery shape and is
-  tracked as a known issue.
+  locking onto another session's file. (Codex had the same discovery shape — fixed
+  in 0.3.9.)
 - **The pet no longer disappears when the display layout changes.** The overlay
   window's bounds were set once at creation to span one display's work area and
   never re-homed, so unplugging a monitor, changing resolution/DPI, docking or
