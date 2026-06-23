@@ -150,19 +150,60 @@ Issues found in live use, with their current status.
   to *thinking* (the agent continues the turn) and the next real event refines it.
   Verified live on the manual path; auto uses the identical matcher mechanism.
 
-## ✅ Resolved: Claude Code subagent completion changed the main session status
+## ✅ Resolved: subagent activity drove the main session status (Claude Code)
 
-- **Symptom:** In Claude Code multi-agent runs, the main agent could already be
-  stopped while a subagent was still finishing. When that late subagent emitted
-  `SubagentStop`, the pet treated it as a main-session `idle` update and could
-  show a misleading working/done transition after the main agent had settled.
-- **Root cause:** The Claude hook table mapped `SubagentStop` to `idle`. That is
-  only safe if subagent completion is ordered before the main turn finishes, which
-  Claude Code does not guarantee.
-- **Fix:** Claude `SubagentStop` is now ignored. Main-session idle still comes
-  from Claude's real `Stop` hook, while late subagent completion cannot override
-  the current main-agent state. Codex keeps its separate behavior because Codex
-  uses `Stop` as the only idle signal and treats `SubagentStop` as mid-turn.
+- **Symptom:** With Claude Code hooks enabled and a multi-agent run, two things
+  went wrong once the **main agent had stopped but a subagent was still working**:
+  (1) the pet dropped to *idle* even though real work was ongoing in the
+  background; and (2) while the subagent ran, its own tool calls flipped the pet
+  between *running tools* / *editing files* / *thinking* — the subagent's activity
+  was driving the main session's status.
+- **Root cause:** Two gaps. (a) The hook table mapped `Stop` → *idle*
+  unconditionally, with no awareness that a backgrounded subagent can outlive the
+  main turn. (b) A backgrounded subagent's tool calls fire the **parent session's**
+  `PreToolUse` / `PostToolUse` hooks, which ran `haya-pet state running_tool`
+  (etc.) under the main session id and overwrote its status. (An earlier fix only
+  stopped `SubagentStop` from reporting *idle*; it addressed neither of these.)
+- **Fix — only ever decided at the main agent's `Stop`; no timers, no persisted
+  state:**
+  - **The "Subagent running" cue.** Claude's `Stop` payload carries an
+    (undocumented) **`background_tasks`** array: a live snapshot of work still
+    running at that instant. When `Stop` would report *idle* but `background_tasks`
+    still lists a running **subagent**, the reporter instead reports *running
+    tools* with the summary **"Subagent running"**
+    (`packages/cli-core/src/background-tasks.js`). When that subagent finishes,
+    Claude fires `Stop` **again** with an empty `background_tasks`, which clears the
+    cue back to *idle* — self-retracting, no timer. (Verified against live hook
+    traces: a backgrounded subagent appears in `Stop`'s `background_tasks` as
+    `type:"subagent", status:"running"`, and a second `Stop` arrives with `[]` once
+    it completes.)
+  - **Subagent events are dropped.** Every hook payload from a subagent context
+    carries an **`agent_id`** — the documented field that distinguishes subagent
+    hook calls from main-thread calls. The reporter now drops any event with an
+    `agent_id` (`extractAgentId` in `run-state.js`), so a subagent's tool use can
+    never overwrite the main session's status. Main-agent events have no `agent_id`
+    and report as before; the main `Stop` (also no `agent_id`) still carries the
+    `background_tasks` snapshot used for the cue above. `SubagentStop` is likewise
+    not wired.
+- **Known limitations (accepted):**
+  - **Only subagents, never background shells.** A `background_tasks` entry can
+    also be `type:"shell"` (e.g. a `sleep 120` the agent backgrounded). These are
+    deliberately **not** surfaced: their completion isn't reliably observable here,
+    and a "working" cue we can't retract is worse than showing *idle*. So a
+    backgrounded shell still running after the main agent stops shows *idle*.
+  - **The `agent_id` discriminator is documented but not yet captured live on
+    `PreToolUse` / `PostToolUse`.** The Claude hooks reference lists `agent_id` /
+    `agent_type` as optional fields delivered to all hooks to distinguish subagent
+    calls, and the observed flicker confirms subagent tool calls reach the parent
+    hooks — but a subagent `PreToolUse` payload hasn't been captured on disk to
+    100% confirm `agent_id` is present there. If a future Claude build omits it the
+    flicker could recur; the marker would then be widened to also match
+    `agent_type` / `agent_transcript_path`.
+- **How to diagnose if it recurs:** with `HAYA_PET_HOOK_DEBUG=<path>` set, the
+  reporter logs an `agentId` field on subagent-sourced events (which it then
+  drops). A subagent event logged with **no** `agentId` is the signal to widen the
+  marker. Codex keeps its separate behavior: it uses `Stop` as the only idle signal
+  and treats `SubagentStop` as mid-turn.
 
 ## ✅ Resolved: false "waiting for approval" while Codex auto-reviews an approval (Approve for me)
 
@@ -426,8 +467,12 @@ observation (`--observe`) or L1 lifecycle as the fallback. Current state:
   `Notification`/`PreCompact`/`PostCompact`/`Stop` events to `haya-pet state <state>`,
   reported to the daemon over the IPC pipe. `PostCompact` is split by its
   `manual`/`auto` trigger matcher (manual `/compact` → *idle*, auto compaction →
-  *thinking*) so the pet never sticks on *compacting*. `SubagentStop` is intentionally ignored because
-  it is not a main-turn idle signal. `PreToolUse` distinguishes
+  *thinking*) so the pet never sticks on *compacting*. Subagent-originated events
+  are **dropped** by the reporter (they carry an `agent_id`), so a subagent's tool
+  use never drives the main status, and `SubagentStop` is not wired; when `Stop`
+  fires while a subagent is still running, its `background_tasks` snapshot surfaces
+  as a *running tools* / "Subagent running" cue that the next (empty) `Stop` clears
+  — see the resolved subagent entry above. `PreToolUse` distinguishes
   file-editing tools (`Edit`/`Write`/`MultiEdit`/`NotebookEdit` → *editing files*)
   from other tools (→ *running tools*) via the hook `matcher`. **Why opt-in:**
   injecting hooks makes Claude show a one-time *review hooks* trust prompt; the

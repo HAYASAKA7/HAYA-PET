@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runGenericCommand as defaultRunGenericCommand } from "../../../packages/cli-core/src/run-command.js";
-import { parseStateArgs, runStateCommand, readHookTranscriptPathFromStdin } from "../../../packages/cli-core/src/run-state.js";
+import { parseStateArgs, runStateCommand, readHookPayloadFromStdin } from "../../../packages/cli-core/src/run-state.js";
 import { removeSessionTranscriptLink } from "../../../packages/cli-core/src/session-transcript-link.js";
 import { injectClaudeHooks as defaultInjectClaudeHooks } from "../../../packages/cli-core/src/claude-hook-injection.js";
 import { injectCodexHooks as defaultInjectCodexHooks } from "../../../packages/cli-core/src/codex-hook-injection.js";
@@ -969,19 +969,30 @@ if (isDirectRun(import.meta.url, process.argv[1])) {
 }
 
 // Real-process entry. For a `haya-pet state` invocation — which is ALWAYS a client
-// hook child — read the hook payload from stdin once to learn this session's real
-// transcript path, and hand it to the reporter so it can record the
-// session->transcript link. Done here (not inside main/runStateCommand) so unit
-// tests, and every other command that needs stdin passed through to its child
-// (e.g. `run`), never touch stdin.
+// hook child — read the hook payload from stdin once to learn: this session's real
+// transcript path (for the session->transcript link); the live background_tasks
+// snapshot (so a Stop with a still-running subagent keeps a working cue instead of
+// idle); and the agent_id (present only for subagent-originated events, which the
+// reporter drops so a subagent's activity never overwrites the main status). All
+// are handed to the reporter via dependencies. Done here (not inside
+// main/runStateCommand) so unit tests, and every other command that needs stdin
+// passed through to its child (e.g. `run`), never touch stdin.
 async function bootstrap() {
   const argv = process.argv.slice(2);
   const dependencies = {};
   if (argv[0] === "state") {
     try {
-      const transcriptPath = await readHookTranscriptPathFromStdin();
+      const { transcriptPath, backgroundTasks, agentId } = await readHookPayloadFromStdin();
       if (transcriptPath) {
         dependencies.transcriptPath = transcriptPath;
+      }
+      if (Array.isArray(backgroundTasks) && backgroundTasks.length > 0) {
+        dependencies.backgroundTasks = backgroundTasks;
+      }
+      // Present only for subagent-originated events — the reporter drops those so a
+      // subagent's tool use never overwrites the main session's status.
+      if (agentId) {
+        dependencies.agentId = agentId;
       }
     } catch {
       // a missing/garbled payload just means no binding this time — never fatal

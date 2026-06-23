@@ -7,6 +7,24 @@ All notable changes to HAYA Pet are documented here. This project adheres to
 > 0.2.0 npm publish; they are listed under 0.2.1, which is the first version that
 > ships them.
 
+## [0.3.10]
+
+### Fixed
+- **A running Claude Code subagent no longer drives the main session's status.**
+  With hooks enabled and a multi-agent run, once the main agent had stopped but a
+  subagent was still working, two things went wrong: the pet dropped to *idle*
+  (even though work was ongoing), and while the subagent ran its tool calls flipped
+  the pet between *running tools* / *editing files* / *thinking*. Fix, checked
+  **only at the main agent's `Stop`** (no timers, no persisted state): (1) Claude's
+  `Stop` payload carries a live `background_tasks` snapshot — when it still lists a
+  running **subagent**, the pet shows *running tools* with the message **"Subagent
+  running"**, and the follow-up `Stop` (empty `background_tasks`) clears it back to
+  *idle*; (2) every subagent-originated hook event carries an `agent_id`, so the
+  reporter now **drops any event with an `agent_id`**, and a subagent's activity can
+  no longer overwrite the main session's status. Background **shells** are
+  deliberately not surfaced (their completion isn't reliably observable). See
+  `docs/known-issues.md`.
+
 ## [0.3.9]
 
 ### Fixed

@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "../../../test/harness.mjs";
-import { extractTranscriptPath, parseStateArgs, runStateCommand } from "../src/run-state.js";
+import { extractAgentId, extractTranscriptPath, parseStateArgs, runStateCommand } from "../src/run-state.js";
 import { readSessionTranscriptLink } from "../src/session-transcript-link.js";
 
 test("runStateCommand appends a debug line when HAYA_PET_HOOK_DEBUG is set", async () => {
@@ -33,6 +33,40 @@ test("extractTranscriptPath pulls transcript_path out of a Claude hook payload",
   assert.equal(extractTranscriptPath(JSON.stringify({ transcript_path: 42 })), undefined);
   assert.equal(extractTranscriptPath(""), undefined);
   assert.equal(extractTranscriptPath(undefined), undefined);
+});
+
+test("extractAgentId pulls agent_id out of a subagent hook payload", () => {
+  assert.equal(
+    extractAgentId(JSON.stringify({ hook_event_name: "PreToolUse", agent_id: "a9a8317d", agent_type: "Explore" })),
+    "a9a8317d"
+  );
+  // Main-agent events carry no agent_id; junk and wrong types yield undefined.
+  assert.equal(extractAgentId(JSON.stringify({ hook_event_name: "Stop" })), undefined);
+  assert.equal(extractAgentId(JSON.stringify({ agent_id: 42 })), undefined);
+  assert.equal(extractAgentId(JSON.stringify({ agent_id: "" })), undefined);
+  assert.equal(extractAgentId("{not json"), undefined);
+  assert.equal(extractAgentId(undefined), undefined);
+});
+
+test("runStateCommand ignores subagent-originated events so they never drive main status", async () => {
+  let connected = false;
+  const sent = [];
+  const result = await runStateCommand(
+    { command: "state", state: "running_tool", summary: undefined, session: "sess_main" },
+    {
+      now: () => 9,
+      agentId: "a9a8317d3457d6364",
+      createIpcClient: async () => {
+        connected = true;
+        return { send: async (m) => sent.push(m), close: async () => {} };
+      }
+    }
+  );
+
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, "subagent-event");
+  assert.equal(connected, false);
+  assert.equal(sent.length, 0);
 });
 
 test("runStateCommand records the session->transcript link when given a transcript path", async () => {
@@ -110,6 +144,39 @@ test("runStateCommand sends one official_plugin state message", async () => {
     source: "official_plugin",
     updatedAt: 1000
   });
+});
+
+test("runStateCommand upgrades a Stop idle to a working cue when a subagent still runs", async () => {
+  const sent = [];
+  const result = await runStateCommand(
+    { command: "state", state: "idle", summary: undefined, session: "sess_bg" },
+    {
+      now: () => 42,
+      backgroundTasks: [
+        { id: "x", type: "subagent", status: "running", description: "Survey repo structure" }
+      ],
+      createIpcClient: async () => ({ send: async (m) => sent.push(m), close: async () => {} })
+    }
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(sent[0].state, "running_tool");
+  assert.equal(sent[0].summary, "Subagent running");
+});
+
+test("runStateCommand reports plain idle when the follow-up Stop has no running subagents", async () => {
+  const sent = [];
+  await runStateCommand(
+    { command: "state", state: "idle", summary: undefined, session: "sess_done" },
+    {
+      now: () => 43,
+      backgroundTasks: [],
+      createIpcClient: async () => ({ send: async (m) => sent.push(m), close: async () => {} })
+    }
+  );
+
+  assert.equal(sent[0].state, "idle");
+  assert.equal(sent[0].summary, undefined);
 });
 
 test("runStateCommand falls back to HAYA_PET_SESSION_ID", async () => {
