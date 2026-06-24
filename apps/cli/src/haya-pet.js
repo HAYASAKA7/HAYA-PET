@@ -219,8 +219,10 @@ function resolveCodexApprovalsReviewer(options = {}) {
 
   const home = options.codexHome ?? env.CODEX_HOME ?? resolveHomeCodexDir(options.homeDir, env);
   const readFile = options.readFile ?? readFileSync;
+  const profileName = findCodexProfileInArgs(options.childArgs ?? []);
+  const fromProfile = profileName ? readCodexApprovalsReviewerFromProfile(home, profileName, readFile) : undefined;
   const fromConfig = readCodexApprovalsReviewerFromConfig(home, readFile);
-  return fromConfig ?? "user";
+  return fromProfile ?? fromConfig ?? "user";
 }
 
 function resolveHomeCodexDir(homeDir, env) {
@@ -250,12 +252,49 @@ function findCodexApprovalsReviewerInArgs(args) {
   return reviewer;
 }
 
+function findCodexProfileInArgs(args) {
+  let profileName;
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    let value;
+    if (arg === "-p" || arg === "--profile") {
+      value = args[index + 1];
+      index += 1;
+    } else if (arg.startsWith("--profile=")) {
+      value = arg.slice("--profile=".length);
+    } else if (arg.startsWith("-p=")) {
+      value = arg.slice("-p=".length);
+    } else if (arg.startsWith("-p") && arg.length > 2) {
+      value = arg.slice(2);
+    }
+
+    if (isCodexProfileName(value)) {
+      profileName = value;
+    }
+  }
+  return profileName;
+}
+
+function isCodexProfileName(value) {
+  return typeof value === "string" && /^[A-Za-z0-9_-]+$/.test(value);
+}
+
+function readCodexApprovalsReviewerFromProfile(codexHome, profileName, readFile) {
+  if (!codexHome || !isCodexProfileName(profileName)) {
+    return undefined;
+  }
+  return readCodexApprovalsReviewerFromFile(join(codexHome, `${profileName}.config.toml`), readFile);
+}
 function readCodexApprovalsReviewerFromConfig(codexHome, readFile) {
   if (!codexHome) {
     return undefined;
   }
+  return readCodexApprovalsReviewerFromFile(join(codexHome, "config.toml"), readFile);
+}
+
+function readCodexApprovalsReviewerFromFile(path, readFile) {
   try {
-    return parseTopLevelApprovalsReviewer(readFile(join(codexHome, "config.toml"), "utf8"));
+    return parseTopLevelApprovalsReviewer(readFile(path, "utf8"));
   } catch {
     return undefined;
   }
@@ -407,162 +446,154 @@ async function runRunCommand(parsed, dependencies) {
     };
   }
 
-  // Codex: no `--settings` equivalent, so inject a stable profile and add
-  // `-p <name>` at the FRONT (a global flag must precede any subcommand). Codex
-  // takes only one profile, so if the user already passes their own -p/--profile
-  // we skip injection and say so rather than clobber their choice. Codex
+  // Codex: no `--settings` equivalent, so install stable user-level hooks in
+  // CODEX_HOME/hooks.json. Codex loads user hooks alongside any selected
+  // -p/--profile, so the wrapper never consumes the user's single profile slot.
   // PreToolUse is not reliable, so a transcript watcher supplies tool activity.
   const codexHooksOn = hooksOn && parsed.clientId === "codex";
   if (codexHooksOn) {
-    if (hasProfileArg(parsed.childArgs)) {
-      print(
-        "haya-pet: Codex live-status hooks skipped — you passed your own -p/--profile (Codex allows only one)."
-      );
-    } else {
-      const injected = injectCodexHooks();
-      childArgs = ["-p", injected.profileName, ...parsed.childArgs];
-      childEnv = {
-        ...env,
-        HAYA_PET_SESSION_ID: sessionId,
-        HAYA_PET_CODEX_APPROVAL_REVIEWER: resolveCodexApprovalsReviewer({
-          childArgs: parsed.childArgs,
-          env,
-          homeDir: dependencies.homeDir,
-          codexHome: dependencies.codexHome,
-          readFile: dependencies.readFile
-        })
-      };
-      cleanup = injected.cleanup;
-
-      // Pin both Codex watchers to THIS session's rollout via the
-      // session->transcript link the `haya-pet state` reporter records from the
-      // hook payload's transcript_path, instead of guessing newest-by-mtime (which
-      // leaks a concurrent same-cwd session's activity/interrupts).
-      const sessionDir = resolveSessionDir(dependencies, env);
-
-      const activeToolCalls = new Set();
-      const watcher = watchCodexTranscript({
+    const injected = injectCodexHooks();
+    childEnv = {
+      ...env,
+      HAYA_PET_SESSION_ID: sessionId,
+      HAYA_PET_CODEX_APPROVAL_REVIEWER: resolveCodexApprovalsReviewer({
+        childArgs: parsed.childArgs,
+        env,
         homeDir: dependencies.homeDir,
-        sessionsRoot: dependencies.codexSessionsRoot,
-        cwd,
-        startedAt: now(),
-        sessionId,
-        sessionDir,
-        onToolEvent: (event) => {
-          hookDebugLog(env, now, {
-            source: "codex_transcript",
-            event: event.type,
-            toolCallId: event.toolCallId,
-            toolName: event.toolName,
-            state: event.state
-          });
+        codexHome: dependencies.codexHome,
+        readFile: dependencies.readFile
+      })
+    };
+    cleanup = injected.cleanup;
 
-          // Esc-interrupt fires no Stop hook, so without this the pet stays stuck
-          // on "thinking"/"running" until the stale sweep.
-          if (event.type === "turn_aborted") {
-            activeToolCalls.clear();
-            messageSender
-              .send({
-                type: "state",
-                sessionId,
-                state: "interrupted",
-                summary: "interrupted",
-                confidence: 0.9,
-                source: "client_log",
-                updatedAt: now()
-              })
-              .catch(() => {});
-            return;
-          }
+    // Pin both Codex watchers to THIS session's rollout via the
+    // session->transcript link the `haya-pet state` reporter records from the
+    // hook payload's transcript_path, instead of guessing newest-by-mtime (which
+    // leaks a concurrent same-cwd session's activity/interrupts).
+    const sessionDir = resolveSessionDir(dependencies, env);
 
-          if (event.type === "tool_started") {
-            activeToolCalls.add(event.toolCallId);
-            messageSender
-              .send({
-                type: "state",
-                sessionId,
-                state: event.state,
-                summary: event.toolName,
-                confidence: 0.85,
-                source: "client_log",
-                updatedAt: now()
-              })
-              .catch(() => {});
-            return;
-          }
+    const activeToolCalls = new Set();
+    const watcher = watchCodexTranscript({
+      homeDir: dependencies.homeDir,
+      sessionsRoot: dependencies.codexSessionsRoot,
+      cwd,
+      startedAt: now(),
+      sessionId,
+      sessionDir,
+      onToolEvent: (event) => {
+        hookDebugLog(env, now, {
+          source: "codex_transcript",
+          event: event.type,
+          toolCallId: event.toolCallId,
+          toolName: event.toolName,
+          state: event.state
+        });
 
-          if (event.type === "tool_finished") {
-            activeToolCalls.delete(event.toolCallId);
-            if (activeToolCalls.size === 0) {
-              messageSender
-                .send({
-                  type: "state",
-                  sessionId,
-                  state: "thinking",
-                  confidence: 0.85,
-                  source: "client_log",
-                  updatedAt: now()
-                })
-                .catch(() => {});
-            }
-          }
-        }
-      });
-      const previousStopWatcher = stopWatcher;
-      stopWatcher = () => {
-        watcher.stop();
-        previousStopWatcher();
-      };
-
-      // With "Approve for me" (approvals_reviewer=auto_review, legacy alias
-      // guardian_subagent), Codex routes approval requests to a guardian
-      // subagent and never shows the human approval UI — yet the
-      // PermissionRequest hook still fires at request creation. The hook's
-      // reporter uses the resolved approvals reviewer config: auto-review
-      // reports reviewing immediately, while manual review reports waiting.
-      // The guardian's own rollout is the only observable record of the
-      // review, so tail it: a review turn starting proves the agent is
-      // reviewing; an "allow" verdict proves the action proceeds; a "deny"
-      // verdict goes back to the model, which keeps working. An unreadable
-      // verdict reports nothing — a pending cue is never cleared on a guess.
-      const guardianWatcher = watchCodexGuardianReviews({
-        homeDir: dependencies.homeDir,
-        sessionsRoot: dependencies.codexSessionsRoot,
-        cwd,
-        startedAt: now(),
-        sessionId,
-        sessionDir,
-        onReviewEvent: (event) => {
-          hookDebugLog(env, now, {
-            source: "codex_guardian",
-            event: event.type,
-            outcome: event.outcome
-          });
-
-          const report = resolveGuardianStateReport(event);
-          if (!report) {
-            return;
-          }
+        // Esc-interrupt fires no Stop hook, so without this the pet stays stuck
+        // on "thinking"/"running" until the stale sweep.
+        if (event.type === "turn_aborted") {
+          activeToolCalls.clear();
           messageSender
             .send({
               type: "state",
               sessionId,
-              state: report.state,
-              summary: report.summary,
+              state: "interrupted",
+              summary: "interrupted",
+              confidence: 0.9,
+              source: "client_log",
+              updatedAt: now()
+            })
+            .catch(() => {});
+          return;
+        }
+
+        if (event.type === "tool_started") {
+          activeToolCalls.add(event.toolCallId);
+          messageSender
+            .send({
+              type: "state",
+              sessionId,
+              state: event.state,
+              summary: event.toolName,
               confidence: 0.85,
               source: "client_log",
               updatedAt: now()
             })
             .catch(() => {});
+          return;
         }
-      });
-      const stopWithoutGuardian = stopWatcher;
-      stopWatcher = () => {
-        guardianWatcher.stop();
-        stopWithoutGuardian();
-        removeSessionTranscriptLink({ sessionDir, sessionId });
-      };
-    }
+
+        if (event.type === "tool_finished") {
+          activeToolCalls.delete(event.toolCallId);
+          if (activeToolCalls.size === 0) {
+            messageSender
+              .send({
+                type: "state",
+                sessionId,
+                state: "thinking",
+                confidence: 0.85,
+                source: "client_log",
+                updatedAt: now()
+              })
+              .catch(() => {});
+          }
+        }
+      }
+    });
+    const previousStopWatcher = stopWatcher;
+    stopWatcher = () => {
+      watcher.stop();
+      previousStopWatcher();
+    };
+
+    // With "Approve for me" (approvals_reviewer=auto_review, legacy alias
+    // guardian_subagent), Codex routes approval requests to a guardian
+    // subagent and never shows the human approval UI — yet the
+    // PermissionRequest hook still fires at request creation. The hook's
+    // reporter uses the resolved approvals reviewer config: auto-review
+    // reports reviewing immediately, while manual review reports waiting.
+    // The guardian's own rollout is the only observable record of the
+    // review, so tail it: a review turn starting proves the agent is
+    // reviewing; an "allow" verdict proves the action proceeds; a "deny"
+    // verdict goes back to the model, which keeps working. An unreadable
+    // verdict reports nothing — a pending cue is never cleared on a guess.
+    const guardianWatcher = watchCodexGuardianReviews({
+      homeDir: dependencies.homeDir,
+      sessionsRoot: dependencies.codexSessionsRoot,
+      cwd,
+      startedAt: now(),
+      sessionId,
+      sessionDir,
+      onReviewEvent: (event) => {
+        hookDebugLog(env, now, {
+          source: "codex_guardian",
+          event: event.type,
+          outcome: event.outcome
+        });
+
+        const report = resolveGuardianStateReport(event);
+        if (!report) {
+          return;
+        }
+        messageSender
+          .send({
+            type: "state",
+            sessionId,
+            state: report.state,
+            summary: report.summary,
+            confidence: 0.85,
+            source: "client_log",
+            updatedAt: now()
+          })
+          .catch(() => {});
+      }
+    });
+    const stopWithoutGuardian = stopWatcher;
+    stopWatcher = () => {
+      guardianWatcher.stop();
+      stopWithoutGuardian();
+      removeSessionTranscriptLink({ sessionDir, sessionId });
+    };
   }
 
   try {
@@ -629,13 +660,6 @@ function isTruthyFlag(value) {
   return value === "1" || value === "true";
 }
 
-// Detect a user-supplied Codex profile flag so we don't clobber it: -p, --profile,
-// or the `--profile=foo` / `-p=foo` forms.
-function hasProfileArg(args) {
-  return args.some(
-    (arg) => arg === "-p" || arg === "--profile" || arg.startsWith("--profile=") || arg.startsWith("-p=")
-  );
-}
 
 function createConfigStateFile(dependencies) {
   const paths = getDefaultPaths({

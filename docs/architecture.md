@@ -63,11 +63,10 @@ in-session activity through the shared, client-agnostic `haya-pet state` command
 
 The injection mechanism differs per client. **Claude Code** takes a stable
 `claude --settings <file>`. **Codex** has no per-invocation settings flag, so the
-wrapper writes a stable `$CODEX_HOME/haya-pet.config.toml` profile and prepends
-`-p haya-pet` to the codex args (a profile layers on top of the user's base config,
-leaving auth/model/MCP intact, and is inert otherwise). Codex allows only one
-profile, so if the user already passes `-p/--profile`, injection is skipped with a
-notice. Codex's hook command must be unquoted at the program position (it runs via
+wrapper merges stable user-level hooks into `$CODEX_HOME/hooks.json`. Codex loads
+that hook source alongside any selected `-p/--profile`, so custom profiles remain
+untouched while HAYA Pet still sets the per-session environment and watchers.
+Codex's hook command must be unquoted at the program position (it runs via
 `cmd /c`, which strips a leading quote) and its matchers can't use look-around
 (Rust regex) — see [known-issues.md](known-issues.md). Codex's L4 is **partial**:
 `PreToolUse` doesn't fire upstream yet, so tool activity comes from an L3

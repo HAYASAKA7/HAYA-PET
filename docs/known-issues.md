@@ -259,15 +259,13 @@ Issues found in live use, with their current status.
 
 - **Symptom:** Even after approving HAYA Pet's Codex hooks once, every new
   `haya-pet run --client codex` showed Codex's hook review prompt again.
-- **Root cause:** HAYA Pet correctly wrote a stable
-  `$CODEX_HOME/haya-pet.config.toml` profile, but Codex stores the user's hook
-  trust decisions back into that same profile under `[hooks.state]` as
-  `trusted_hash` entries. The injector rewrote the entire profile on every
-  launch, so it deleted Codex's trust cache before Codex could reuse it.
-- **Fix:** The Codex hook injector now regenerates the HAYA-managed hook tables
-  while preserving the Codex-managed `[hooks.state]` tables from the existing
-  profile. Users may need to approve once after updating; after that, unchanged
-  hook commands should stay trusted.
+- **Root cause:** Older builds wrote a stable `$CODEX_HOME/haya-pet.config.toml`
+  profile, but Codex stored hook trust decisions back into that same profile
+  under `[hooks.state]`. Rewriting the profile on launch deleted that trust cache.
+- **Fix:** The Codex hook injector now writes stable commands into
+  `$CODEX_HOME/hooks.json` and preserves existing user hooks while refreshing
+  HAYA-managed entries. Users may need to approve once after updating; after
+  that, unchanged hook commands should stay trusted.
 
 ## ✅ Resolved: Codex pet looked busy immediately after startup
 
@@ -481,9 +479,9 @@ observation (`--observe`) or L1 lifecycle as the fallback. Current state:
   launch — see the resolved note below). `--observe` is a separate PTY opt-in for
   non-interactive runs (terminal-fidelity tradeoff).
 - **Codex** — **implemented (partial).** Opt-in via the global `haya-pet hooks on`;
-  the wrapper injects `packages/adapters/src/codex-hooks.js` as a stable
-  `$CODEX_HOME/haya-pet.config.toml` profile and launches `codex -p haya-pet`
-  (`packages/cli-core/src/codex-hook-injection.js`). Falls back to `--observe` / L1
+  the wrapper injects `packages/adapters/src/codex-hooks.js` as stable user-level
+  hooks in `$CODEX_HOME/hooks.json` (`packages/cli-core/src/codex-hook-injection.js`).
+  Custom Codex `-p/--profile` args remain untouched. Falls back to `--observe` / L1
   when not enabled. Findings (verified against `codex-cli` 0.137.0 on Windows):
   - **Mechanism fits.** Codex has a lifecycle-hooks system (`[[hooks.<Event>]]` in
     `config.toml` or a `hooks.json`), with the `hooks` feature flag `stable` and ON
@@ -497,11 +495,10 @@ observation (`--observe`) or L1 lifecycle as the fallback. Current state:
     signal (`SubagentStop` is mid-turn → stays *thinking*). `PermissionRequest`
     exists, so the approval cue is reachable.
   - **Injection differs** — Codex has no `claude --settings <file>` equivalent.
-    Candidate non-mutating paths: `codex -p haya-pet` layering a generated
-    `$CODEX_HOME/haya-pet.config.toml` profile on top of the user's base config, or a
-    `hooks.json` next to the active config layer. Codex has its own *review hooks*
-    trust prompt (bypass: `--dangerously-bypass-hook-trust`), so the same one-time
-    trust UX as Claude applies.
+    HAYA Pet uses `$CODEX_HOME/hooks.json`, merging HAYA-managed entries with any
+    existing user hooks. Codex loads that hook source alongside selected profiles,
+    and has its own *review hooks* trust prompt (bypass:
+    `--dangerously-bypass-hook-trust`), so the same one-time trust UX as Claude applies.
   - **Windows command quoting (fixed in the adapter):** Codex runs a hook `command`
     via `cmd /c "<cmd>"`, which strips a **leading** quote — so Claude's
     `"<node>" "<cli>" …` form dies with *"hook exited with code 1"*. The Codex

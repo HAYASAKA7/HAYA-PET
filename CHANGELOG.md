@@ -7,6 +7,17 @@ All notable changes to HAYA Pet are documented here. This project adheres to
 > 0.2.0 npm publish; they are listed under 0.2.1, which is the first version that
 > ships them.
 
+## [0.3.11]
+
+### Fixed
+- **Codex live-status hooks now work with custom profiles.** HAYA Pet no longer
+  injects its own `-p haya-pet` profile or skips hooks when the wrapped Codex
+  command already has `-p` / `--profile`. Instead it merges stable HAYA-managed
+  hook entries into `$CODEX_HOME/hooks.json`, preserving any existing user hooks
+  and leaving profile args such as `--profile fugu` untouched. The wrapper still
+  resolves profile-specific `approvals_reviewer` settings so approval status
+  matches the selected Codex profile.
+
 ## [0.3.10]
 
 ### Fixed

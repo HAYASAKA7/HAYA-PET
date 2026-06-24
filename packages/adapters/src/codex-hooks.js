@@ -49,14 +49,12 @@
 //  - UNTESTED: PreCompact / SubagentStart|Stop live firing (no compaction /
 //    subagent occurred in the probe).
 //
-// OPEN QUESTION (injection): unlike `claude --settings <file>`, Codex has no
-// per-invocation settings-file flag. Candidate non-mutating paths, best first:
-//   1. `codex -p haya-pet` + a generated `$CODEX_HOME/haya-pet.config.toml` profile
-//      that layers ON TOP of the user's base config (auth/config preserved).
-//   2. a `hooks.json` next to the active config layer ($CODEX_HOME/hooks.json) —
-//      simple but global to every codex session (harmless: the reporter no-ops
-//      without HAYA_PET_SESSION_ID).
-// Both still trip Codex's one-time hook-trust prompt, exactly like the Claude path.
+// Injection: unlike `claude --settings <file>`, Codex has no per-invocation
+// settings-file flag. The wrapper writes stable user-level hooks to
+// $CODEX_HOME/hooks.json, merging HAYA-managed entries with any existing user
+// hooks. This avoids consuming Codex's single -p/--profile slot; the reporter
+// still no-ops without HAYA_PET_SESSION_ID.
+// This still trips Codex's one-time hook-trust prompt, exactly like the Claude path.
 
 // Codex's file-editing tool(s) vs. its command tool.
 const EDIT_TOOLS = ["apply_patch"];

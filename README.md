@@ -193,6 +193,12 @@ resolved `approvals_reviewer` setting, and transcript watchers report tool/file
 activity plus guardian-review outcomes. With **"Approve for me"** the pet shows
 *reviewing* immediately; *waiting for approval* is reserved for Codex's manual
 "Ask for approval" mode.
+
+Codex custom profiles are preserved. HAYA Pet installs its live-status hooks in
+`$CODEX_HOME/hooks.json` instead of passing its own `-p` profile, so launches such
+as `haya-pet run --client codex -- codex --profile fugu` keep both the selected
+Codex profile and HAYA live status.
+
 Per-tool `PreToolUse` hooks still depend on an upstream Codex gap
 ([openai/codex#16732](https://github.com/openai/codex/issues/16732)); the
 transcript watcher covers that in the meantime.
