@@ -7,6 +7,16 @@ All notable changes to HAYA Pet are documented here. This project adheres to
 > 0.2.0 npm publish; they are listed under 0.2.1, which is the first version that
 > ships them.
 
+## [0.3.13]
+
+### Added
+- **Right-clicking the pet now opens the tray menu.** A right-click used to behave
+  like a left-click (wave + fold/unfold the bubbles). It now pops up the same
+  menu as the system-tray icon — Show/Hide Pet, Active Sessions, Installed Pets,
+  Reset Position, update, Quit — which is far more discoverable than the tray icon
+  (often hidden in the Windows overflow). The menu is built from the one pure tray
+  model, so both entry points always match. Left-click behaviour is unchanged.
+
 ## [0.3.12]
 
 ### Fixed

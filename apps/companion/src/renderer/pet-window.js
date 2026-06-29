@@ -192,6 +192,11 @@ function playOneShot(action) {
 // --- Pointer interaction (click vs drag distinction lives in the controller) ---
 
 canvas.addEventListener("pointerdown", (event) => {
+  // Only the primary button drives click/drag; right-click pops the context menu
+  // (handled below) and must not also fire a wave/toggle or start a drag.
+  if (event.button !== 0) {
+    return;
+  }
   canvas.setPointerCapture(event.pointerId);
   // Hold click-through off for the whole press: a drag swaps to the running
   // frames, whose opaque pixels differ from the grabbed one, so re-running the
@@ -211,6 +216,11 @@ canvas.addEventListener("pointermove", (event) => {
 });
 
 canvas.addEventListener("pointerup", (event) => {
+  // Mirror pointerdown: ignore non-primary releases so a right-click never feeds
+  // the click controller (its pointerDown was skipped anyway).
+  if (event.button !== 0) {
+    return;
+  }
   // Click / double-click are delivered asynchronously via onAction; only the
   // synchronous drag-end is handled here.
   petPressed = false;
@@ -225,6 +235,15 @@ canvas.addEventListener("pointerup", (event) => {
 canvas.addEventListener("pointercancel", () => {
   petPressed = false;
   animationState = clearDragAction(animationState);
+});
+
+// Right-click the pet to open the same menu as the tray icon. The native menu is
+// built and shown in the main process; preventDefault stops Electron's default
+// context menu. Only fires over opaque pet pixels (transparent areas are
+// click-through and the right-click falls to the desktop, like a left-click).
+canvas.addEventListener("contextmenu", (event) => {
+  event.preventDefault();
+  bridge?.showPetMenu?.();
 });
 
 // --- Resize grip: drag to scale the pet, double-click to reset ---

@@ -220,6 +220,7 @@ non-observe mode keeps terminal input native.
 |---|---|
 | Single click | Wave and fold or unfold session bubbles. |
 | Double click | Jump and expand session bubbles. |
+| Right click | Open the same menu as the tray icon (sessions, pets, reset, updates, quit). |
 | Drag | Move the pet; position is saved. |
 | Drag corner grip | Resize from 0.5x to 2x; size is saved. |
 | Double-click grip | Reset to normal size. |

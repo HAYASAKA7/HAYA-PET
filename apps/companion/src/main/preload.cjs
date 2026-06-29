@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld("aiPet", {
   savePetPosition: (local) => ipcRenderer.invoke("haya-pet:save-pet-position", local),
   savePetScale: (scale) => ipcRenderer.invoke("haya-pet:save-pet-scale", scale),
   setMouseIgnore: (ignore) => ipcRenderer.send("haya-pet:set-mouse-ignore", ignore),
+  showPetMenu: () => ipcRenderer.send("haya-pet:show-pet-menu"),
   onConfig: (handler) => ipcRenderer.on("haya-pet:config", (_event, config) => handler(config)),
   onSessions: (handler) => ipcRenderer.on("haya-pet:sessions", (_event, payload) => handler(payload)),
   onPetPosition: (handler) => ipcRenderer.on("haya-pet:pet-position", (_event, pos) => handler(pos)),

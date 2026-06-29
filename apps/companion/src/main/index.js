@@ -291,17 +291,15 @@ function loadTrayIcon() {
   return fileIcon.isEmpty() ? nativeImage.createFromDataURL(TRAY_ICON_DATA_URL) : fileIcon;
 }
 
-function refreshTrayMenu() {
-  if (!tray) {
-    return;
-  }
-
+// Builds the native menu template from the pure tray model. Shared by the tray
+// icon and the pet's right-click context menu so both stay identical.
+function buildTrayMenuTemplate() {
   const sessions = (runtime?.listSessions() ?? []).map((session) => ({
     sessionId: session.sessionId,
     label: `${session.clientDisplayName} · ${session.projectName}`
   }));
 
-  const template = buildTrayMenu({
+  return buildTrayMenu({
     petVisible: petWindow?.isVisible() ?? true,
     displayMode: positionState.settings.displayMode,
     attachBubblesToTerminals: positionState.settings.attachBubblesToTerminals,
@@ -310,8 +308,14 @@ function refreshTrayMenu() {
     pets: pets.map((pet) => ({ id: pet.manifest.id, name: pet.manifest.name })),
     updateAvailable
   }).map(toElectronMenuItem);
+}
 
-  tray.setContextMenu(Menu.buildFromTemplate(template));
+function refreshTrayMenu() {
+  if (!tray) {
+    return;
+  }
+
+  tray.setContextMenu(Menu.buildFromTemplate(buildTrayMenuTemplate()));
 }
 
 function toElectronMenuItem(item) {
@@ -423,6 +427,16 @@ function registerRendererHandlers() {
     if (petWindow && !petWindow.isDestroyed()) {
       petWindow.setIgnoreMouseEvents(Boolean(ignore), { forward: true });
     }
+  });
+
+  // Right-click on the pet pops up the same menu as the tray icon (built from
+  // the one pure tray model), since the tray icon is often buried in the Windows
+  // overflow. Fire-and-forget: the native menu is shown and dispatched in main.
+  ipcMain.on("haya-pet:show-pet-menu", () => {
+    if (!petWindow || petWindow.isDestroyed()) {
+      return;
+    }
+    Menu.buildFromTemplate(buildTrayMenuTemplate()).popup({ window: petWindow });
   });
 
   // The pet moves within the overlay (CSS), so the renderer reports its new
