@@ -25,6 +25,8 @@ test("builds a bubble view model with label, summary, action, and elapsed", () =
   assert.equal(view.state, "waiting_approval");
   assert.equal(view.statusLabel, "Waiting for approval");
   assert.equal(view.summary, "waiting for command approval");
+  // Fits the 32-char budget, so the compact label matches the full summary.
+  assert.equal(view.summaryLabel, "waiting for command approval");
   assert.equal(view.petAction, "waiting");
   assert.equal(view.elapsedMs, 64_000);
   assert.equal(view.elapsedLabel, "1m 4s");
@@ -70,6 +72,15 @@ test("keeps a short project name whole in projectLabel", () => {
   const view = buildBubbleView({ ...baseSession, projectName: "api" }, 6_000);
   assert.equal(view.projectName, "api");
   assert.equal(view.projectLabel, "api");
+});
+
+test("compacts a long status/tool summary into summaryLabel, keeping the full summary", () => {
+  const longSummary = "Read packages/session-core/src/summaries.js";
+  const view = buildBubbleView({ ...baseSession, state: "running_tool", summary: longSummary }, 6_000);
+  // Full text is preserved (for the detail popup + hover tooltip)...
+  assert.equal(view.summary, longSummary);
+  // ...while the bubble renders the capped form so it can't stretch the width.
+  assert.equal(view.summaryLabel, "Read packages/session-core/src/s...");
 });
 
 test("marks the selected/pinned session", () => {

@@ -198,6 +198,34 @@ test("shows the compact project label and keeps the full name as a tooltip", () 
   }
 });
 
+test("shows the compact summary label and keeps the full summary as a tooltip", () => {
+  const restoreDocument = installFakeDocument();
+  try {
+    const container = new FakeElement("div");
+    const listView = createBubbleList(container, { onRender: createHostOnRender(container) });
+
+    listView.render([{
+      sessionId: "s1",
+      statusKind: "working",
+      statusLabel: "Running tools",
+      clientName: "Claude Code",
+      projectName: "haya-pet",
+      projectLabel: "haya-pet",
+      summary: "Read packages/session-core/src/summaries.js",
+      summaryLabel: "Read packages/session-core/src/s...",
+      elapsedLabel: "1s"
+    }]);
+
+    const activity = findActivity(findBubble(container, "s1"));
+    // The bubble renders the capped label so a long tool name can't widen it...
+    assert.equal(activity.textContent, "Read packages/session-core/src/s...");
+    // ...while the full summary stays reachable on hover.
+    assert.equal(activity.title, "Read packages/session-core/src/summaries.js · 1s");
+  } finally {
+    restoreDocument();
+  }
+});
+
 test("clears everything when no sessions remain", () => {
   const restoreDocument = installFakeDocument();
   try {

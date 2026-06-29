@@ -1,5 +1,5 @@
 import { mapAiStateToPetAction } from "../../pet-core/src/atlas.js";
-import { buildSessionSummary, buildStatusLabel, formatElapsed, truncateProjectName } from "./summaries.js";
+import { buildSessionSummary, buildStatusLabel, formatElapsed, truncateProjectName, truncateSummary } from "./summaries.js";
 
 // Collapses the full AI-state vocabulary into the four progress kinds the
 // bubble panel renders: a spinning "working" circle, a "done" check mark (held
@@ -30,6 +30,7 @@ export function resolveBubbleStatusKind(state) {
 
 export function buildBubbleView(session, now = Date.now(), options = {}) {
   const elapsedMs = Math.max(0, numeric(now) - numeric(session.startedAt));
+  const summary = buildSessionSummary(session);
 
   return {
     sessionId: session.sessionId,
@@ -40,7 +41,11 @@ export function buildBubbleView(session, now = Date.now(), options = {}) {
     state: session.state,
     statusLabel: buildStatusLabel(session.state),
     statusKind: resolveBubbleStatusKind(session.state),
-    summary: buildSessionSummary(session),
+    // Full summary stays for the detail popup + hover tooltip; summaryLabel is
+    // the compact form the bubble renders so a long status/tool name can't
+    // stretch the bubble (mirrors projectName / projectLabel).
+    summary,
+    summaryLabel: truncateSummary(summary),
     petAction: safePetAction(session.state),
     elapsedMs,
     elapsedLabel: formatElapsed(elapsedMs),

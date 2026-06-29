@@ -253,8 +253,10 @@ function applyBubble(el, bubble) {
   project.textContent = bubble.projectLabel ?? bubble.projectName;
   // Hover reveals the full, untruncated "Client · Project".
   title.title = bubble.projectName ? `${bubble.clientName} · ${bubble.projectName}` : bubble.clientName;
-  activity.textContent = bubble.summary;
-  activity.title = `${bubble.statusLabel} · ${bubble.elapsedLabel}`;
+  // Compact label keeps a long status/tool name from stretching the bubble; the
+  // full summary stays reachable on hover (like the project name above).
+  activity.textContent = bubble.summaryLabel ?? bubble.summary;
+  activity.title = `${bubble.summary ?? bubble.statusLabel} · ${bubble.elapsedLabel}`;
 }
 
 // Picks the kind that should win the collapsed-folder dot: a failure or a

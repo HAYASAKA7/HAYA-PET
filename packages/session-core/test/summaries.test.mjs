@@ -4,7 +4,8 @@ import {
   buildStatusLabel,
   buildSessionSummary,
   formatElapsed,
-  truncateProjectName
+  truncateProjectName,
+  truncateSummary
 } from "../src/summaries.js";
 
 test("maps every normalized state to a human status label", () => {
@@ -58,4 +59,24 @@ test("coerces missing or non-string project names to an empty string", () => {
   assert.equal(truncateProjectName(undefined), "");
   assert.equal(truncateProjectName(null), "");
   assert.equal(truncateProjectName(123), "");
+});
+
+test("keeps built-in status labels whole in the summary budget", () => {
+  // The longest built-in label ("Waiting for approval", 20 chars) and a
+  // slightly longer custom message must both fit without an ellipsis.
+  assert.equal(truncateSummary("Waiting for approval"), "Waiting for approval");
+  assert.equal(truncateSummary("waiting for command approval"), "waiting for command approval");
+});
+
+test("truncates a long status or tool-call summary to 32 characters plus an ellipsis", () => {
+  assert.equal(
+    truncateSummary("Read packages/session-core/src/summaries.js"),
+    "Read packages/session-core/src/s..."
+  );
+});
+
+test("honours a custom summary max length and coerces non-strings", () => {
+  assert.equal(truncateSummary("running tools", 4), "runn...");
+  assert.equal(truncateSummary(undefined), "");
+  assert.equal(truncateSummary(123), "");
 });

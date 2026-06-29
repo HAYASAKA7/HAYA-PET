@@ -26,18 +26,34 @@ export function buildSessionSummary(session) {
   return buildStatusLabel(session?.state);
 }
 
+// Ellipsis truncation shared by the bubble's title and activity lines: text up
+// to `maxLength` characters shows whole; longer text is cut to `maxLength` and
+// marked with a trailing "...". Non-strings coerce to "". The full text is kept
+// elsewhere on the view model for a hover tooltip.
+function truncateWithEllipsis(text, maxLength) {
+  const value = typeof text === "string" ? text : "";
+  if (value.length <= maxLength) {
+    return value;
+  }
+  return `${value.slice(0, maxLength)}...`;
+}
+
 // Compacts a project name for the session bubble title, which sits beside the
-// (always-full) client name in a narrow overlay. Names up to `maxLength`
-// characters show whole; longer ones are cut to `maxLength` and marked with an
-// ellipsis. The full name is kept elsewhere on the view model for a tooltip.
+// (always-full) client name in a narrow overlay.
 const DEFAULT_PROJECT_NAME_LENGTH = 10;
 
 export function truncateProjectName(name, maxLength = DEFAULT_PROJECT_NAME_LENGTH) {
-  const text = typeof name === "string" ? name : "";
-  if (text.length <= maxLength) {
-    return text;
-  }
-  return `${text.slice(0, maxLength)}...`;
+  return truncateWithEllipsis(name, maxLength);
+}
+
+// Compacts the activity/status line the same way, so a long status or tool-call
+// summary can't stretch the bubble wider than its (already capped) title. The
+// budget comfortably clears the longest built-in status label so those always
+// show whole; only genuinely long custom summaries get the ellipsis.
+const DEFAULT_SUMMARY_LENGTH = 32;
+
+export function truncateSummary(text, maxLength = DEFAULT_SUMMARY_LENGTH) {
+  return truncateWithEllipsis(text, maxLength);
 }
 
 export function formatElapsed(ms) {

@@ -7,6 +7,18 @@ All notable changes to HAYA Pet are documented here. This project adheres to
 > 0.2.0 npm publish; they are listed under 0.2.1, which is the first version that
 > ships them.
 
+## [0.3.12]
+
+### Fixed
+- **A long status or tool-call name no longer stretches the session bubble.** The
+  activity line is `white-space: nowrap`, and the bubble sizes to its content, so
+  a long summary (e.g. a tool call like `Read packages/session-core/src/...`)
+  dragged the bubble out to its max width before the CSS ellipsis could engage.
+  The status/activity text is now length-capped in the view model (`summaryLabel`,
+  32 chars + `...`) exactly like the project name (`projectLabel`), so it can't
+  widen the bubble; the full summary stays reachable on hover and in the expanded
+  task-talk popup.
+
 ## [0.3.11]
 
 ### Fixed
