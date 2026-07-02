@@ -56,26 +56,23 @@ export function createBubbleList(container, { collapsed = false, onRender } = {}
     }
     updateFolderButton(folderButtonEl, lastBubbles, isCollapsed);
 
-    if (isCollapsed) {
-      // Drop the list while collapsed; it's rebuilt (with restored scroll) on
-      // the next expand. Collapse/expand is an explicit user action, so losing
-      // an in-progress scroll gesture there is fine.
-      if (listEl) {
-        listEl.remove();
-        listEl = undefined;
-      }
-    } else {
-      if (!listEl) {
-        // The list itself must be pointer-active (not just the bubbles): with
-        // more than three sessions it scrolls, and the scrollbar + the gaps
-        // between bubbles belong to the list element — if it stayed
-        // click-through, wheel/drag there would fall through to the desktop.
-        listEl = document.createElement("div");
-        listEl.className = "bubble-list interactive";
-        container.appendChild(listEl);
-      }
-      reconcileBubbles(listEl, lastBubbles);
+    // The list stays mounted whether open or collapsed so the collapse can
+    // animate out (a macOS-popover shrink+fade, see styles.css) instead of
+    // vanishing; this also preserves the scroll position and the spinner across
+    // a toggle. The `collapsed` class drives the transition and, once faded,
+    // drops the list from hit-testing (pointer-events + visibility), so the
+    // click-through overlay ignores it — hence it also sheds the `interactive`
+    // marker while collapsed.
+    if (!listEl) {
+      // The list itself must be pointer-active (not just the bubbles): with more
+      // than three sessions it scrolls, and the scrollbar + the gaps between
+      // bubbles belong to the list element — if it stayed click-through, wheel/
+      // drag there would fall through to the desktop.
+      listEl = document.createElement("div");
+      container.appendChild(listEl);
     }
+    reconcileBubbles(listEl, lastBubbles);
+    listEl.className = isCollapsed ? "bubble-list collapsed" : "bubble-list interactive";
 
     // Let the host reposition the panel now that its size is known. This must
     // happen BEFORE the scroll restore below: the host's placement pass is what
@@ -84,7 +81,9 @@ export function createBubbleList(container, { collapsed = false, onRender } = {}
     // scrollTop assigned to it would clamp back to 0.
     onRender?.();
 
-    if (listEl) {
+    // Restoring scroll only matters while the list is visible; a collapsed list
+    // keeps the scrollTop it had, so it reopens exactly where the user left it.
+    if (!isCollapsed) {
       applyListScroll(listEl, scrollTargetSessionId, lastScrollTop);
       lastScrollTop = listEl.scrollTop;
     }

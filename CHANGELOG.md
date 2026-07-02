@@ -7,6 +7,22 @@ All notable changes to HAYA Pet are documented here. This project adheres to
 > 0.2.0 npm publish; they are listed under 0.2.1, which is the first version that
 > ships them.
 
+## [0.3.14]
+
+### Changed
+- **The session-bubble folder now opens and closes with a smooth animation.**
+  Folding or unfolding the bubbles used to pop them in and out instantly; the
+  panel now grows out of (and shrinks back into) the folder button's corner with
+  a light scale-and-fade — a macOS-popover feel. The transform-origin follows the
+  panel's open direction and alignment, so it always springs from whichever corner
+  sits against the button. The animation is GPU-composited (transform + opacity
+  only, no reflow), so the folder button and the placement math stay put; the list
+  also **stays mounted while collapsed**, which preserves both the scroll position
+  and the live status spinner across a toggle, and it drops out of hit-testing once
+  hidden so the pixel-precise click-through overlay still ignores it. A
+  reduced-motion preference (`prefers-reduced-motion`) snaps the panel open/closed
+  instead of animating.
+
 ## [0.3.13]
 
 ### Added

@@ -150,6 +150,25 @@ body {
   max-width: 300px;
   overflow-y: auto;
   pointer-events: auto;
+  /* Open/close grows out of the folder-button corner (transform-origin set per
+     open direction below), macOS-popover style. transform + opacity are
+     GPU-composited and don't reflow, so the button and placement math stay put. */
+  transform-origin: top left;
+  opacity: 1;
+  transform: scale(1);
+  transition: opacity 0.16s ease, transform 0.2s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Collapsed: shrink toward the anchor corner and fade out, then drop out of
+   hit-testing (visibility + pointer-events) once the fade finishes so the
+   click-through overlay ignores it. Re-expanding reverses this instantly. */
+.bubble-list.collapsed {
+  opacity: 0;
+  transform: scale(0.9);
+  pointer-events: none;
+  visibility: hidden;
+  transition: opacity 0.16s ease, transform 0.18s cubic-bezier(0.32, 0.72, 0, 1),
+    visibility 0s 0.18s;
 }
 
 /* Scrolling is by design (at most three bubbles are visible at once), so give
@@ -175,6 +194,13 @@ body {
 .bubble-list[data-open-direction="up"] { bottom: calc(100% + 6px); }
 .bubble-list[data-open-align="left"] { left: 0; right: auto; }
 .bubble-list[data-open-align="right"] { right: 0; left: auto; }
+
+/* Anchor the grow/shrink to whichever corner sits against the folder button, so
+   the panel appears to spring out of it (and collapse back into it). */
+.bubble-list[data-open-direction="down"][data-open-align="left"] { transform-origin: top left; }
+.bubble-list[data-open-direction="down"][data-open-align="right"] { transform-origin: top right; }
+.bubble-list[data-open-direction="up"][data-open-align="left"] { transform-origin: bottom left; }
+.bubble-list[data-open-direction="up"][data-open-align="right"] { transform-origin: bottom right; }
 
 .bubble {
   display: flex;
@@ -269,4 +295,14 @@ body {
 
 @keyframes status-spin {
   to { transform: rotate(360deg); }
+}
+
+/* Respect a reduced-motion preference: snap the folder open/closed instead of
+   animating the caret and the panel. */
+@media (prefers-reduced-motion: reduce) {
+  .caret,
+  .bubble-list,
+  .bubble-list.collapsed {
+    transition: none;
+  }
 }

@@ -110,7 +110,7 @@ test("updates the folder button in place (count and urgency dot)", () => {
   }
 });
 
-test("preserves scroll position across collapse and expand", () => {
+test("keeps the list mounted but marked collapsed, preserving scroll across a toggle", () => {
   const restoreDocument = installFakeDocument();
   try {
     const container = new FakeElement("div");
@@ -120,11 +120,20 @@ test("preserves scroll position across collapse and expand", () => {
     listView.render(bubbles);
     findList(container).scrollTop = 100;
 
+    // Collapsing keeps the node mounted (so it can animate out) but marks it
+    // collapsed and drops the `interactive` marker so hit-testing ignores it.
     listView.toggle();
-    assert.equal(findList(container), undefined);
-    listView.toggle();
+    const collapsed = findList(container);
+    assert.ok(collapsed);
+    assert.ok(collapsed.className.split(" ").includes("collapsed"));
+    assert.ok(!collapsed.className.split(" ").includes("interactive"));
 
-    assert.equal(findList(container).scrollTop, 100);
+    listView.toggle();
+    const expanded = findList(container);
+    assert.ok(!expanded.className.split(" ").includes("collapsed"));
+    assert.ok(expanded.className.split(" ").includes("interactive"));
+    // The scrollTop rode through untouched since the node was never rebuilt.
+    assert.equal(expanded.scrollTop, 100);
   } finally {
     restoreDocument();
   }
@@ -254,7 +263,7 @@ function makeBubbles(sessionIds) {
 }
 
 function findList(container) {
-  return container.children.find((child) => child.className === "bubble-list interactive");
+  return container.children.find((child) => child.className.split(" ").includes("bubble-list"));
 }
 
 function findButton(container) {
