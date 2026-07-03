@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { appendFileSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, mkdtempSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "../../../test/harness.mjs";
@@ -306,6 +306,64 @@ test("watchCodexGuardianReviews binds to the LINKED main thread, not the newest 
   appendFileSync(ourTrunk, reviewStarted());
   watcher._tick();
   assert.deepEqual(events, [{ type: "review_started" }], "our trunk is the one tailed");
+
+  watcher.stop();
+});
+
+test("watchCodexGuardianReviews does not bind to a concurrent session when the link arrives after the first tick", () => {
+  const { root, dir } = makeSessionsRoot();
+  const sessionDir = mkdtempSync(join(tmpdir(), "sess-"));
+
+  // Our main rollout plus a concurrent OTHER session's main in the SAME dir,
+  // made newer so the old newest-by-mtime fallback would prefer it.
+  const ourMain = join(dir, "rollout-main-ours.jsonl");
+  const otherMain = join(dir, "rollout-main-other.jsonl");
+  writeFileSync(ourMain, metaLine({ id: "main-ours", parent_thread_id: null, source: "cli", thread_source: "user" }));
+  writeFileSync(
+    otherMain,
+    metaLine({ id: "main-other", parent_thread_id: null, source: "cli", thread_source: "user" })
+  );
+  utimesSync(ourMain, new Date(1000), new Date(1000));
+  utimesSync(otherMain, new Date(2000), new Date(2000));
+
+  const events = [];
+  const watcher = watchCodexGuardianReviews({
+    sessionsRoot: root,
+    sessionId: "sess_ours",
+    sessionDir,
+    onReviewEvent: (event) => events.push(event),
+    ...noopTimers
+  });
+
+  // TICK 1 fires ~700ms after the wrapper starts — BEFORE our first prompt writes
+  // the link. The watcher must idle (bind nothing), not latch onto the newest main.
+  watcher._tick();
+
+  // Our first prompt fires a hook; the reporter records OUR link -> our main.
+  writeSessionTranscriptLink({ sessionDir, sessionId: "sess_ours", transcriptPath: ourMain });
+
+  // Both sessions then run a guardian review; the other session's trunk is newer.
+  const ourTrunk = join(dir, "rollout-guardian-ours.jsonl");
+  const otherTrunk = join(dir, "rollout-guardian-other.jsonl");
+  writeFileSync(
+    ourTrunk,
+    metaLine({ id: "g-ours", parent_thread_id: "main-ours", source: { subagent: { other: "guardian" } } })
+  );
+  writeFileSync(
+    otherTrunk,
+    metaLine({ id: "g-other", parent_thread_id: "main-other", source: { subagent: { other: "guardian" } } }) +
+      reviewStarted("decoy")
+  );
+  utimesSync(ourTrunk, new Date(3000), new Date(3000));
+  utimesSync(otherTrunk, new Date(4000), new Date(4000));
+
+  watcher._tick();
+  assert.deepEqual(events, [], "the other session's review must not leak onto ours");
+
+  // Our own review is still reported once our trunk gets a turn.
+  appendFileSync(ourTrunk, reviewStarted());
+  watcher._tick();
+  assert.deepEqual(events, [{ type: "review_started" }], "our own trunk is the one tailed");
 
   watcher.stop();
 });

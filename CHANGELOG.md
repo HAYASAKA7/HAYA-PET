@@ -7,6 +7,28 @@ All notable changes to HAYA Pet are documented here. This project adheres to
 > 0.2.0 npm publish; they are listed under 0.2.1, which is the first version that
 > ships them.
 
+## [0.3.15]
+
+### Fixed
+- **A Codex auto-reviewer no longer shows its status on a *different* concurrent
+  session.** With two Codex sessions in the same folder and live-status hooks on,
+  one session's guardian ("Approve for me") review could drive the *other*
+  session's bubble — surfacing *reviewing* (or the review's tool activity) on a
+  session that wasn't reviewing at all. The guardian-review watcher starts at
+  wrapper launch and binds its main thread on the first poll, which usually runs
+  *before* the first hook records this session's `session → transcript` link. In
+  that window it fell back to "newest main rollout by mtime", which — with a
+  concurrent same-cwd session — could be the **other** session's main thread; that
+  wrong binding was then **cached for the watcher's life**, so the authoritative
+  link never got to correct it and the watcher tailed the other session's guardian
+  trunk. The guardian watcher is now **link-authoritative**, exactly like the main
+  transcript watcher: when a session link is configured (always, in production) it
+  resolves the main thread id **only** from the link and idles until that link
+  resolves — it never guesses by mtime. The mtime fallback remains solely for the
+  no-link path (tests / hooks-off). This closes the residual case left by the
+  0.3.9 cross-session fix; the main Codex and Claude transcript watchers were
+  already link-only and were never affected. Event-backed, no timer.
+
 ## [0.3.14]
 
 ### Changed

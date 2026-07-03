@@ -36,6 +36,13 @@ export function watchCodexGuardianReviews(options = {}) {
   const root = sessionsRoot ?? (homeDir ? join(homeDir, ".codex", "sessions") : undefined);
   const minMtime = startedAt > 0 ? startedAt - MTIME_SKEW_MS : 0;
   const expectedCwd = normalizePathForCompare(cwd);
+  // A session link (sessionId + sessionDir) is present in production. When it is,
+  // the main thread id is resolved ONLY from that link — never guessed from the
+  // newest main rollout by mtime. Guessing binds to a concurrent same-cwd
+  // session's main and then sticks (mainThreadId is cached for the watcher's
+  // life), leaking that session's reviews onto ours. Mirrors the link-only rule
+  // the main transcript watchers use; the mtime fallback stays for the no-link path.
+  const useLink = Boolean(sessionId && sessionDir);
 
   // session_meta classifications are immutable once written, so cache them by
   // path. A file with no complete first line yet is NOT cached — it is retried
@@ -89,11 +96,18 @@ export function watchCodexGuardianReviews(options = {}) {
   };
 
   const discoverTrunk = () => {
-    // Prefer the linked main thread id; fall back to the newest main rollout by
-    // mtime only when no link is available (older behavior, unsafe across
-    // concurrent same-cwd sessions).
+    // Bind the main thread id from THIS session's transcript link, retried every
+    // tick until the link exists (it is written by the first hook, before any
+    // guardian trunk appears). When a link is configured we NEVER fall back to
+    // the newest main rollout by mtime — that heuristic can bind to a concurrent
+    // same-cwd session's main and then stick, leaking its reviews onto ours. So
+    // when a link is expected but not yet resolved, idle rather than guess (the
+    // same link-only rule the main transcript watchers follow).
     if (!mainThreadId) {
       mainThreadId = resolveLinkedMainThreadId();
+    }
+    if (!mainThreadId && useLink) {
+      return;
     }
 
     let newestMain;
@@ -121,10 +135,12 @@ export function watchCodexGuardianReviews(options = {}) {
       }
     }
 
-    // The guardian trunk only appears at the first review, usually long after
-    // the main rollout — bind the main thread first, then match the trunk to
-    // it so another session's (or a collab subagent's) reviews are ignored.
-    mainThreadId = mainThreadId ?? newestMain?.threadId;
+    // Legacy (no session link, e.g. hooks-off paths and older tests): fall back
+    // to the newest main rollout by mtime. With a link this never runs — the
+    // early return above guarantees mainThreadId already came from the link.
+    if (!useLink) {
+      mainThreadId = mainThreadId ?? newestMain?.threadId;
+    }
     if (mainThreadId && newestTrunk?.parentThreadId === mainThreadId) {
       // Replay the trunk from the start: the first review is usually still in
       // progress when we find the file, and the per-record timestamp filter

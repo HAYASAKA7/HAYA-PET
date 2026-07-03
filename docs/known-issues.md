@@ -29,7 +29,22 @@ Issues found in live use, with their current status.
   guardian watcher derives the main thread id from the **linked** rollout's
   `payload.id` (and only considers a trunk whose `parent_thread_id` matches it).
   Both fall back to the old heuristic when no link is available (e.g. `transcript_path`
-  null early), so there is no regression. No timer involved.
+  null early). No timer involved. *(The guardian watcher's fallback turned out to
+  have a residual race — see the follow-up below.)*
+- **Follow-up (residual guardian race, now closed):** the guardian watcher's mtime
+  fallback above was itself unsafe across concurrent same-cwd sessions. The watcher
+  starts at wrapper launch and binds its main thread id on the **first poll**, which
+  normally runs *before* the first hook writes the link. In that window it fell back
+  to the newest main rollout by mtime — and with a second Codex session in the same
+  folder that could be the **other** session's main; worse, the bound id was cached
+  for the watcher's life, so the link never got to correct it and the watcher tailed
+  the other session's guardian trunk. It surfaced most with the auto-reviewer
+  ("Approve for me"), the case that produces a guardian trunk to mis-tail. The
+  guardian watcher is now **link-authoritative**: when a session link is configured
+  (always, in production) it resolves the main thread id **only** from the link and
+  idles until the link resolves — it never guesses by mtime, exactly like the main
+  transcript watcher. The mtime fallback remains only for the no-link path (tests /
+  hooks-off). A regression test covers the tick-before-link ordering. No timer.
 
 ## ✅ Resolved: Claude interrupt/denial leaked into a concurrent idle session
 
