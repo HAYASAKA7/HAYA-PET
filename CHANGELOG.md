@@ -7,6 +7,25 @@ All notable changes to HAYA Pet are documented here. This project adheres to
 > 0.2.0 npm publish; they are listed under 0.2.1, which is the first version that
 > ships them.
 
+## [0.3.16]
+
+### Fixed
+- **The pet overlay now recovers after GPU or renderer crashes.** Under heavy
+  GPU load, such as local image generation, Chromium's GPU or renderer process
+  could die while the Electron main process, tray icon, and daemon kept running.
+  The result looked like a vanished pet: **Reset Position** and relaunching
+  `haya-pet` could not repaint the dead transparent surface. The companion now
+  treats real GPU/renderer process exits as recoverable overlay failures,
+  destroys the dead BrowserWindow, recreates it on a valid display, and keeps the
+  user's preferred-display memory intact. Recovery is suppressed during normal
+  app quit, deduped when GPU and renderer crash events arrive together, and capped
+  after repeated failed reloads to avoid a crash-recreate loop.
+- **Overlay crash diagnostics are written to disk.** Crash, recovery, and main
+  process exception/rejection details are appended to `overlay-crash.log` in the
+  HAYA Pet log directory so rare blank-overlay reports have evidence after the
+  fact. The log path is `%LOCALAPPDATA%\haya-pet\logs\overlay-crash.log` on
+  Windows and `~/.haya-pet/logs/overlay-crash.log` on macOS/Linux.
+
 ## [0.3.15]
 
 ### Fixed

@@ -1,6 +1,6 @@
 import { app, BrowserWindow, ipcMain, Menu, nativeImage, powerMonitor, screen, shell, Tray } from "electron";
 import { fileURLToPath } from "node:url";
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createDaemonRuntime } from "../../../../packages/daemon-core/src/daemon-runtime.js";
 import { createIpcServer } from "../../../../packages/daemon-core/src/ipc-server.js";
@@ -15,6 +15,7 @@ import { buildBubbleViews } from "../../../../packages/session-core/src/bubble-v
 import { clampScale } from "../../../../packages/pet-core/src/pet-scale.js";
 import { buildPetWindowOptions, PET_SIZE } from "./window-options.js";
 import { clampLocalToWorkArea, resolveOverlayPlacement } from "./display-manager.js";
+import { createOverlayCrashPolicy } from "./overlay-crash-recovery.js";
 import { getPetScale, setPetScale, setSelectedPet, updateGlobalPetPosition } from "./position-store.js";
 import { buildTrayMenu, buildTrayTooltip } from "./tray-menu.js";
 import { createStateFile } from "./state-file.js";
@@ -23,6 +24,11 @@ import { checkForUpdate, UPDATE_PAGE_URL } from "../../../../packages/app-state/
 
 const STALE_SWEEP_INTERVAL_MS = 10_000;
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// render-process-gone / child-process-gone reasons that mean a genuine crash we
+// should recover from. Clean exits and kills (e.g. during app shutdown) are
+// excluded so quitting never spawns a replacement overlay.
+const CRASH_REASONS = new Set(["crashed", "oom", "launch-failed", "integrity-failure"]);
 
 // Fallback tray icon (16×16 blue dot) used when no tray.png asset is present, so
 // the tray — and therefore the Quit menu — always appears. Without it, a missing
@@ -81,6 +87,13 @@ let approvalWatch;
 // Set once the daily npm update check finds a newer version; surfaces as a
 // tray item (see tray-menu.js).
 let updateAvailable;
+
+// Auto-recovers the transparent overlay when its GPU/renderer process crashes
+// (see overlay-crash-recovery.js). `quittingApp` suppresses recovery during
+// shutdown so a teardown-time process exit is not mistaken for a crash.
+const overlayCrashPolicy = createOverlayCrashPolicy();
+let quittingApp = false;
+let overlayRecovering = false;
 
 // Electron singleton: a second launch forwards to the running instance.
 if (!app.requestSingleInstanceLock()) {
@@ -152,6 +165,7 @@ async function bootstrap() {
   createTray();
   registerRendererHandlers();
   registerDisplayWatchers();
+  registerCrashWatchers();
   // Best-effort and cached in state.json (shared with the CLI's check, so at
   // most one registry request per day between them); never blocks startup.
   void detectUpdate();
@@ -165,6 +179,7 @@ async function bootstrap() {
   sweep.unref?.();
 
   app.on("before-quit", async () => {
+    quittingApp = true;
     clearInterval(sweep);
     approvalWatch?.stopAll();
     await ipcServer?.close();
@@ -195,9 +210,80 @@ function createPetWindow() {
   petWindow.setIgnoreMouseEvents(true, { forward: true });
   petWindow.loadFile(join(__dirname, "..", "renderer", "index.html"));
   petWindow.webContents.on("did-finish-load", () => {
+    // A finished load means the (possibly recreated) overlay is painting again,
+    // so clear the in-flight flag and the consecutive-crash count.
+    overlayRecovering = false;
+    overlayCrashPolicy.markRecovered();
     sendPetConfig();
     pushSessions();
   });
+
+  // The renderer process dying (crash / OOM) leaves the transparent overlay blank
+  // while the app keeps running — recreate it. Filtered to real crashes so a clean
+  // exit or a kill during shutdown does not trigger a recovery.
+  petWindow.webContents.on("render-process-gone", (_event, details) => {
+    if (!CRASH_REASONS.has(details?.reason)) {
+      return;
+    }
+    handleOverlayCrash("render-process-gone", { reason: details.reason, exitCode: details.exitCode });
+  });
+}
+
+// Recover from an overlay GPU/renderer crash by recreating the window outright.
+// Re-asserting bounds does not repaint a dead surface, so the window itself must
+// be rebuilt; createPetWindow re-resolves placement and the follow-up re-home puts
+// it on a currently-valid display and shows it. persist:false keeps the user's
+// preferred-display memory intact (as with automatic display re-homes).
+function recreatePetWindow() {
+  const previous = petWindow;
+  petWindow = undefined;
+  try {
+    previous?.destroy();
+  } catch {
+    // destroying an already-dead window is fine
+  }
+  createPetWindow();
+  rehomeOverlay({ persist: false });
+}
+
+// Decide-and-act on an overlay crash: log it (always), then recreate the window
+// unless we are shutting down or the crash policy has hit its loop guard.
+function handleOverlayCrash(kind, details = {}) {
+  // Ignore crashes during shutdown, and while a recovery is already in flight — a
+  // single GPU loss often fires BOTH the GPU child-process-gone and the renderer
+  // render-process-gone, and we want ONE recreate, not a double rebuild that also
+  // double-counts against the loop guard.
+  if (quittingApp || overlayRecovering) {
+    return;
+  }
+  const recover = overlayCrashPolicy.shouldRecover();
+  logOverlayCrash({ kind, ...details, recover, consecutiveFailures: overlayCrashPolicy.consecutiveFailures });
+  if (!recover) {
+    return;
+  }
+  overlayRecovering = true;
+  try {
+    recreatePetWindow();
+  } catch (error) {
+    // A failed rebuild clears the in-flight flag so a later crash can retry.
+    overlayRecovering = false;
+    console.error("overlay recovery failed:", error.message);
+  }
+}
+
+// Append one JSONL line per overlay crash (and whether we attempted recovery) to
+// the logs dir. Unlike the opt-in debug logs this is always on: a crash is rare,
+// unpredictable, and exactly what we need a record of after the fact. Never throws.
+function logOverlayCrash(entry) {
+  try {
+    mkdirSync(paths.logDir, { recursive: true });
+    appendFileSync(
+      join(paths.logDir, "overlay-crash.log"),
+      `${JSON.stringify({ ts: new Date().toISOString(), ...entry })}\n`
+    );
+  } catch {
+    // logging a crash must never crash the daemon
+  }
 }
 
 function scaledPetSize() {
@@ -418,6 +504,45 @@ function registerDisplayWatchers() {
   }
 }
 
+// The GPU process dying (a driver TDR reset or VRAM exhaustion under heavy load,
+// e.g. local image generation) is app-wide rather than tied to one webContents,
+// and likewise blanks the transparent overlay. Recreate the overlay when it goes,
+// filtered to real crashes so a shutdown-time kill is ignored.
+function registerCrashWatchers() {
+  app.on("child-process-gone", (_event, details) => {
+    if (details?.type !== "GPU" || !CRASH_REASONS.has(details?.reason)) {
+      return;
+    }
+    handleOverlayCrash("gpu-process-gone", { reason: details.reason, exitCode: details.exitCode });
+  });
+
+  // On Windows/Linux, Electron's DEFAULT when the last window closes is to quit the
+  // whole app. For this persistent overlay+daemon that means a single stray window
+  // close silently tears down the pet — the process exits cleanly, so there is no
+  // crash, no WER fault, and no log, exactly matching the "running but I can't see
+  // it" reports. Subscribing here overrides that default: unless we are genuinely
+  // quitting, rebuild the overlay instead of exiting. handleOverlayCrash logs it,
+  // honors the quit + in-flight guards, and applies the same loop cap.
+  app.on("window-all-closed", () => {
+    handleOverlayCrash("window-all-closed");
+  });
+
+  // A stray error in the MAIN process otherwise exits it silently (Electron writes
+  // to a detached stderr no one sees). Log it with a stack so the next occurrence
+  // finally has a cause on disk, and keep the tray/daemon alive — a logged bad
+  // state beats a vanished pet. (Child renderer/GPU crashes are handled above.)
+  process.on("uncaughtException", (error) => {
+    logOverlayCrash({ kind: "uncaught-exception", message: error?.message, stack: error?.stack });
+  });
+  process.on("unhandledRejection", (reason) => {
+    logOverlayCrash({
+      kind: "unhandled-rejection",
+      message: reason?.message ?? String(reason),
+      stack: reason?.stack
+    });
+  });
+}
+
 function registerRendererHandlers() {
   ipcMain.handle("haya-pet:list-sessions", () => buildSessionPayload());
 
@@ -518,7 +643,11 @@ function persistPetPosition() {
 }
 
 function togglePet() {
-  if (!petWindow) {
+  if (!petWindow || petWindow.isDestroyed()) {
+    // The window was torn down (e.g. a stray close the quit-guard kept from
+    // killing the app); rebuild it rather than no-op on a dead reference.
+    recreatePetWindow();
+    refreshTrayMenu();
     return;
   }
   if (petWindow.isVisible()) {
@@ -534,13 +663,22 @@ function togglePet() {
 
 function focusPet() {
   // Relaunching `haya-pet` (second-instance) is also a "bring it back" gesture, so
-  // re-home rather than show at possibly-stale bounds.
+  // re-home — or rebuild the window outright if it was torn down.
+  if (!petWindow || petWindow.isDestroyed()) {
+    recreatePetWindow();
+    return;
+  }
   rehomeOverlay();
 }
 
 function resetPosition() {
   // Re-home onto a valid display FIRST (a stale display layout is exactly when
-  // users reach for Reset), then drop the pet to the bottom-right corner.
+  // users reach for Reset), then drop the pet to the bottom-right corner — or
+  // rebuild the window if it was torn down entirely.
+  if (!petWindow || petWindow.isDestroyed()) {
+    recreatePetWindow();
+    return;
+  }
   rehomeOverlay({ recenter: true });
 }
 

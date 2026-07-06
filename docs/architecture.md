@@ -112,6 +112,14 @@ dragged via CSS; the bubble panel is placed on whichever side of the pet has roo
 so it stays fully on-screen. The pet currently lives on a single display's work
 area.
 
+The companion treats the overlay BrowserWindow as replaceable runtime state. If a
+real renderer or GPU process crash (`crashed`, `oom`, `launch-failed`, or
+`integrity-failure`) blanks the transparent surface while the daemon stays alive,
+the main process logs the event to `overlay-crash.log`, destroys the dead window,
+recreates it, and re-homes it onto a valid display without overwriting the user's
+preferred display. Normal app shutdown is ignored, duplicate GPU+renderer events
+are coalesced, and a small consecutive-crash cap prevents a recreate loop.
+
 The bubble panel shows at most three sessions and scrolls for the rest (capped
 by the smaller of a height budget and a count budget, see
 `bubble-list-viewport.js`). It renders **incrementally** — the list element and

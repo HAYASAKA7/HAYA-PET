@@ -19,6 +19,7 @@ unit-tested pure packages and is imported directly:
 | Click vs drag | `apps/companion/src/renderer/interaction-controller.js` |
 | Window options / overlay vs fallback | `src/main/window-options.js` |
 | Display clamping / DPI | `src/main/display-manager.js` |
+| Overlay crash recovery | `src/main/overlay-crash-recovery.js` plus `index.js` crash watchers |
 | Position persistence | `src/main/position-store.js` + `state-file.js` |
 | Session bubbles | `packages/session-core/src/bubble-view.js` |
 | Adapter capabilities | `packages/adapters` |
@@ -77,6 +78,8 @@ so the companion starts with your last selected pet.
 
 - The overlay never steals focus (`focusable: false` on supported platforms) and
   is click-through except over the pet and bubbles.
+- The main process recreates the overlay after real GPU/renderer crashes and
+  writes `overlay-crash.log` in the platform log directory for diagnostics.
 - All IPC is local-only; nothing is sent to the network.
 - When the parked reply/approval surface is wired up, replies will be gated by
   adapter capability (wrapper-only clients can't inject text blindly) and
