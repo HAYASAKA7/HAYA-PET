@@ -7,6 +7,13 @@ All notable changes to HAYA Pet are documented here. This project adheres to
 > 0.2.0 npm publish; they are listed under 0.2.1, which is the first version that
 > ships them.
 
+## [0.3.18]
+
+### Changed
+- **Session bubbles now render without the heavy drop shadow.** Removed the
+  shadow from the session bubble stack and its folder toggle so the overlay reads
+  flatter and cleaner beside the pet.
+
 ## [0.3.17]
 
 ### Fixed

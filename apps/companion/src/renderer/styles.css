@@ -99,7 +99,6 @@ body {
   padding: 4px 10px;
   font-size: 12px;
   cursor: pointer;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
 }
 
 /* Monochrome disclosure caret (CSS triangle), points right when collapsed and
@@ -211,7 +210,6 @@ body {
   border-radius: 10px;
   padding: 8px 10px;
   font-size: 12px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
   border-left: 3px solid transparent;
   min-width: 180px;
   max-width: 280px;
