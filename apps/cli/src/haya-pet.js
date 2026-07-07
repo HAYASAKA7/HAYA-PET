@@ -452,7 +452,12 @@ async function runRunCommand(parsed, dependencies) {
   // PreToolUse is not reliable, so a transcript watcher supplies tool activity.
   const codexHooksOn = hooksOn && parsed.clientId === "codex";
   if (codexHooksOn) {
-    const injected = injectCodexHooks();
+    const codexProfileName = findCodexProfileInArgs(parsed.childArgs);
+    const injected = injectCodexHooks({
+      env,
+      codexHome: dependencies.codexHome,
+      profileName: codexProfileName
+    });
     childEnv = {
       ...env,
       HAYA_PET_SESSION_ID: sessionId,

@@ -63,9 +63,16 @@ in-session activity through the shared, client-agnostic `haya-pet state` command
 
 The injection mechanism differs per client. **Claude Code** takes a stable
 `claude --settings <file>`. **Codex** has no per-invocation settings flag, so the
-wrapper merges stable user-level hooks into `$CODEX_HOME/hooks.json`. Codex loads
-that hook source alongside any selected `-p/--profile`, so custom profiles remain
-untouched while HAYA Pet still sets the per-session environment and watchers.
+wrapper merges stable user-level hooks into `$CODEX_HOME/hooks.json`. Before
+regenerating HAYA-managed entries, the Codex injector reuses the already-installed
+HAYA command path while its Node binary and CLI file still exist, and it skips the
+write when the merged JSON is unchanged; this keeps Codex's hook-trust hash stable
+across Node manager, Node version, and launcher-path churn. Codex loads that hook
+source alongside any selected `-p`/`--profile`, so custom profiles remain available
+while HAYA Pet still sets the per-session environment and watchers. Codex stores
+reviewed hook hashes in the active config layer; when a named profile is selected,
+HAYA Pet mirrors the already-trusted `hooks.json` state from base `config.toml`
+into that profile so users do not have to re-approve the same hooks.
 Codex's hook command must be unquoted at the program position (it runs via
 `cmd /c`, which strips a leading quote) and its matchers can't use look-around
 (Rust regex) — see [known-issues.md](known-issues.md). Codex's L4 is **partial**:

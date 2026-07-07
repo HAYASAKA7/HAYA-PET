@@ -2,6 +2,36 @@
 
 Issues found in live use, with their current status.
 
+## ✅ Resolved: Codex hook trust could re-prompt after approval
+
+- **Symptom:** After approving HAYA Pet's Codex hooks once, Codex could still
+  ask to review them again on later launches. It was intermittent rather than
+  every run. It could happen even with the default config when HAYA Pet was
+  launched through a different Node manager path, Node version, npm link, or
+  install path, and it was also visible with named `-p`/`--profile` configs whose
+  hook-trust state was missing or stale.
+- **Root cause:** HAYA Pet correctly moved Codex hooks into user-level
+  `$CODEX_HOME/hooks.json`, but the injector rebuilt the managed hook commands
+  from the current launch environment on every run. If the resolved Node binary
+  or CLI path changed, Codex saw a different hook definition and asked for trust
+  again. Separately, Codex records reviewed `trusted_hash` blocks in the active
+  config layer. A default launch writes them under base `config.toml`; a profiled
+  launch can read/write `<profile>.config.toml` instead, so the same shared
+  `hooks.json` source could be trusted in one config layer but not the other.
+  Older HAYA Pet builds also wrote managed `[[hooks.*]]` tables directly into
+  profile TOML; those stale profile hooks remained loaded beside the newer shared
+  `hooks.json` source.
+- **Fix:** `injectCodexHooks` now reads the existing `hooks.json` before
+  rebuilding it. When the already-installed HAYA hook command points to existing
+  Node and CLI files, the injector keeps that command path instead of replacing
+  it with the current launcher's path, and it skips the file write entirely when
+  the merged JSON is unchanged. The wrapper also parses the selected Codex
+  profile and passes it to the injector, which copies the existing trusted
+  `hooks.json` `[hooks.state]` blocks from base `config.toml` into the selected
+  profile config, replacing stale blocks for that hook source and removing legacy
+  HAYA-managed TOML hook tables. Unrelated profile settings, user hooks, and
+  unrelated trust state are preserved.
+
 ## ✅ Resolved: cross-session status contamination on Codex
 
 - **Symptom (same class as the Claude entry below):** interrupting one Codex

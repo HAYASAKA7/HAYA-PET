@@ -580,13 +580,14 @@ test("codex hooks pass auto-review config to the PermissionRequest reporter", as
 
 test("codex hooks read approvals reviewer from the selected profile config", async () => {
   const calls = [];
+  let injectOptions;
   await runAiPet(["run", "--client", "codex", "--", "codex", "--profile=fugu"], {
     cwd: process.cwd(),
     env: { USERPROFILE: "C:\\Users\\A" },
     heartbeatIntervalMs: 10,
     send: async () => {},
     createStateFile: hooksStateFile(true),
-    injectCodexHooks: () => ({ hooksPath: "C:\\Users\\A\\.codex\\hooks.json", cleanup: () => {} }),
+    injectCodexHooks: (options = {}) => { injectOptions = options; return { hooksPath: "C:\\Users\\A\\.codex\\hooks.json", cleanup: () => {} }; },
     readFile: (path) => String(path).endsWith("fugu.config.toml")
       ? 'approvals_reviewer = "auto_review"\n'
       : 'approvals_reviewer = "user"\n',
@@ -596,6 +597,7 @@ test("codex hooks read approvals reviewer from the selected profile config", asy
     }
   });
 
+  assert.equal(injectOptions.profileName, "fugu", "hook injector gets the selected Codex profile");
   assert.deepEqual(calls[0].args, ["--profile=fugu"], "profile arg is untouched");
   assert.equal(calls[0].env.HAYA_PET_CODEX_APPROVAL_REVIEWER, "auto_review");
 });
@@ -683,6 +685,7 @@ test("codex hooks also start a guardian-review watcher that reports review state
 test("codex hooks preserve user profile args and still wire live status", async () => {
   const calls = [];
   let injected = 0;
+  let injectOptions;
   let watched = 0;
   const lines = [];
   await runAiPet(["run", "--client", "codex", "--", "codex", "-p", "mine"], {
@@ -692,7 +695,7 @@ test("codex hooks preserve user profile args and still wire live status", async 
     send: async () => {},
     createStateFile: hooksStateFile(true),
     print: (line) => lines.push(line),
-    injectCodexHooks: () => { injected += 1; return { hooksPath: "C:\\Users\\A\\.codex\\hooks.json", cleanup: () => {} }; },
+    injectCodexHooks: (options) => { injected += 1; injectOptions = options; return { hooksPath: "C:\\Users\\A\\.codex\\hooks.json", cleanup: () => {} }; },
     watchCodexTranscript: () => { watched += 1; return { stop: () => {} }; },
     runGenericCommand: async (options) => {
       calls.push(options);
@@ -701,6 +704,7 @@ test("codex hooks preserve user profile args and still wire live status", async 
   });
 
   assert.equal(injected, 1, "hooks are installed even when Codex gets a user profile");
+  assert.equal(injectOptions.profileName, "mine", "hook injector gets the short selected Codex profile");
   assert.equal(watched, 1, "transcript watcher still starts for profiled runs");
   assert.deepEqual(calls[0].args, ["-p", "mine"], "user args untouched");
   assert.equal(calls[0].env.HAYA_PET_SESSION_ID, calls[0].sessionId);

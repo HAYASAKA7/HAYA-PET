@@ -7,6 +7,28 @@ All notable changes to HAYA Pet are documented here. This project adheres to
 > 0.2.0 npm publish; they are listed under 0.2.1, which is the first version that
 > ships them.
 
+## [0.3.17]
+
+### Fixed
+- **Codex hook trust is now remembered across default and profiled launches.**
+  HAYA Pet now keeps the generated `$CODEX_HOME/hooks.json` definition stable
+  even when the wrapper is started through a different Node manager path, Node
+  version, npm link, or install path. The injector reuses an already-installed
+  HAYA hook command while its Node binary and CLI file still exist, and skips
+  rewriting `hooks.json` when the merged JSON is unchanged. This prevents Codex
+  from seeing a fresh hook definition after the user already approved the same
+  HAYA hook set.
+- **Codex hook trust is also mirrored into selected profiles.** Codex stores
+  reviewed hook hashes in the active config layer, not only beside the shared
+  `$CODEX_HOME/hooks.json` source. A named `-p`/`--profile` whose
+  `<profile>.config.toml` had missing or stale `[hooks.state]` entries could
+  still trigger another *review hooks* prompt; older HAYA Pet builds could also
+  leave managed `[[hooks.*]]` tables embedded in profile TOML. The wrapper now
+  passes the selected Codex profile to the injector. The injector removes legacy
+  HAYA TOML hook tables from that profile and mirrors the existing trusted
+  `hooks.json` hash blocks from base `config.toml`, while preserving unrelated
+  profile settings and user hooks.
+
 ## [0.3.16]
 
 ### Fixed
