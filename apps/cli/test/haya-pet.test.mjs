@@ -829,6 +829,77 @@ test("a transcript turn_aborted reports a failed status for Codex", async () => 
   assert.equal(interrupted.updatedAt, 42);
 });
 
+test("a Codex usage-limit transcript event reports a non-terminal interrupted status", async () => {
+  const sent = [];
+  let fireToolEvent;
+  await runAiPet(["run", "--client", "codex", "--", "codex"], {
+    cwd: process.cwd(),
+    env: { USERPROFILE: "C:\\Users\\A" },
+    now: () => 42,
+    heartbeatIntervalMs: 10,
+    send: async (message) => sent.push(message),
+    createStateFile: hooksStateFile(true),
+    injectCodexHooks: () => ({ profileName: "haya-pet", cleanup: () => {} }),
+    watchCodexTranscript: ({ onToolEvent }) => { fireToolEvent = onToolEvent; return { stop: () => {} }; },
+    runGenericCommand: async (options) => {
+      fireToolEvent({ type: "usage_limit_reached", limitType: "primary" });
+      return { sessionId: options.sessionId, pid: 1, exitCode: 0 };
+    }
+  });
+
+  const interrupted = sent.find((m) => m.type === "state" && m.source === "client_log" && m.state === "interrupted");
+  assert.ok(interrupted, "a client_log interrupted state was sent on usage-limit exhaustion");
+  assert.equal(interrupted.summary, "usage limit reached");
+  assert.equal(interrupted.updatedAt, 42);
+});
+
+test("a Codex transcript failed-turn event reports a non-terminal interrupted status", async () => {
+  const sent = [];
+  let fireToolEvent;
+  await runAiPet(["run", "--client", "codex", "--", "codex"], {
+    cwd: process.cwd(),
+    env: { USERPROFILE: "C:\\Users\\A" },
+    now: () => 42,
+    heartbeatIntervalMs: 10,
+    send: async (message) => sent.push(message),
+    createStateFile: hooksStateFile(true),
+    injectCodexHooks: () => ({ profileName: "haya-pet", cleanup: () => {} }),
+    watchCodexTranscript: ({ onToolEvent }) => { fireToolEvent = onToolEvent; return { stop: () => {} }; },
+    runGenericCommand: async (options) => {
+      fireToolEvent({ type: "turn_failed", reason: "empty_response" });
+      return { sessionId: options.sessionId, pid: 1, exitCode: 0 };
+    }
+  });
+
+  const interrupted = sent.find((m) => m.type === "state" && m.source === "client_log" && m.state === "interrupted");
+  assert.ok(interrupted, "a client_log interrupted state was sent when Codex completed without a response");
+  assert.equal(interrupted.summary, "model response failed");
+  assert.equal(interrupted.updatedAt, 42);
+});
+
+test("a Codex transcript completed-turn event clears the turn to idle", async () => {
+  const sent = [];
+  let fireToolEvent;
+  await runAiPet(["run", "--client", "codex", "--", "codex"], {
+    cwd: process.cwd(),
+    env: { USERPROFILE: "C:\\Users\\A" },
+    now: () => 42,
+    heartbeatIntervalMs: 10,
+    send: async (message) => sent.push(message),
+    createStateFile: hooksStateFile(true),
+    injectCodexHooks: () => ({ profileName: "haya-pet", cleanup: () => {} }),
+    watchCodexTranscript: ({ onToolEvent }) => { fireToolEvent = onToolEvent; return { stop: () => {} }; },
+    runGenericCommand: async (options) => {
+      fireToolEvent({ type: "turn_complete" });
+      return { sessionId: options.sessionId, pid: 1, exitCode: 0 };
+    }
+  });
+
+  const idle = sent.find((m) => m.type === "state" && m.source === "client_log" && m.state === "idle");
+  assert.ok(idle, "a client_log idle state was sent on transcript turn completion");
+  assert.equal(idle.summary, "turn complete");
+  assert.equal(idle.updatedAt, 42);
+});
 test("non-hook-capable clients are never injected even with HAYA_PET_HOOKS=1", async () => {
   const calls = [];
   await runAiPet(["run", "--client", "generic", "--", "aider"], {

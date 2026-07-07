@@ -2,6 +2,28 @@
 
 Issues found in live use, with their current status.
 
+## ✅ Resolved: Codex usage-limit exhaustion left sessions thinking
+
+- **Symptom:** When Codex hit an AI subscription or usage limit mid-turn, the pet
+  could keep showing *thinking* instead of switching to a visible live warning.
+  The Codex session had stopped making progress, but the last live-status hook
+  event remained visible in the bubble.
+- **Root cause:** The Codex transcript watcher only surfaced tool activity and
+  `turn_aborted` interrupt records. OpenAI-backed Codex usage exhaustion can be
+  visible as a `token_count` event with
+  `rate_limits.rate_limit_reached_type`, while some third-party providers write
+  only a `task_complete` record with no `last_agent_message` and no first-token
+  timing after printing the usage warning in the terminal. HAYA Pet ignored both
+  turn-ending forms, so no live turn status replaced the earlier *thinking* state.
+- **Fix:** `parseCodexTranscriptLine` now normalizes non-empty
+  `rate_limit_reached_type` values into `usage_limit_reached`, normal
+  `task_complete` records into `turn_complete`, and empty completions into
+  `turn_failed`. The Codex wrapper clears active tool tracking and emits the
+  existing non-terminal `interrupted` state for the failure cases or `idle` for
+  normal completion, so the bubble leaves the spinner without being treated as a
+  finished session. Regression tests cover both parser and wrapper status paths,
+  including the empty-completion provider-limit shape reproduced live.
+
 ## ✅ Resolved: Codex hook trust could re-prompt after approval
 
 - **Symptom:** After approving HAYA Pet's Codex hooks once, Codex could still

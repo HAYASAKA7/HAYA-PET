@@ -33,11 +33,29 @@ export function parseCodexTranscriptLine(line, options = {}) {
     return undefined;
   }
 
-  // The user pressing Esc aborts the turn. Codex fires no Stop hook on an abort,
-  // so this event_msg is the only signal the turn ended by interruption — without
-  // it the pet stays stuck on "thinking" until the stale sweep.
-  if (entry.type === "event_msg" && payload.type === "turn_aborted") {
-    return { type: "turn_aborted", reason: typeof payload.reason === "string" ? payload.reason : undefined };
+  if (entry.type === "event_msg") {
+    // The user pressing Esc aborts the turn. Codex fires no Stop hook on an abort,
+    // so this event_msg is the only signal the turn ended by interruption — without
+    // it the pet stays stuck on "thinking" until the stale sweep.
+    if (payload.type === "turn_aborted") {
+      return { type: "turn_aborted", reason: typeof payload.reason === "string" ? payload.reason : undefined };
+    }
+
+    if (payload.type === "token_count") {
+      const limitType = payload.rate_limits?.rate_limit_reached_type;
+      if (typeof limitType === "string" && limitType.trim() !== "") {
+        return { type: "usage_limit_reached", limitType: limitType.trim() };
+      }
+    }
+
+    if (payload.type === "task_complete") {
+      const hasFinalMessage = typeof payload.last_agent_message === "string" && payload.last_agent_message.trim() !== "";
+      const sawFirstToken = Number.isFinite(payload.time_to_first_token_ms);
+      if (!hasFinalMessage && !sawFirstToken) {
+        return { type: "turn_failed", reason: "empty_response" };
+      }
+      return { type: "turn_complete" };
+    }
   }
 
   if (entry.type !== "response_item") {

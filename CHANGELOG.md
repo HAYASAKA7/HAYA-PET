@@ -7,6 +7,18 @@ All notable changes to HAYA Pet are documented here. This project adheres to
 > 0.2.0 npm publish; they are listed under 0.2.1, which is the first version that
 > ships them.
 
+## [0.3.19]
+
+### Fixed
+- **Codex usage/provider-limit stops no longer leave the pet thinking.** HAYA Pet
+  now recognizes Codex transcript `token_count` records with
+  `rate_limits.rate_limit_reached_type`, third-party provider-limit turns that
+  end as empty `task_complete` records, and normal `task_complete` records. The
+  wrapper clears active tool state and reports the existing non-terminal
+  **interrupted** state for usage/empty-response failures or **idle** for normal
+  completion, so the session bubble no longer stays stuck on **thinking** and
+  does not linger out as a finished failure while Codex is still open.
+
 ## [0.3.18]
 
 ### Changed

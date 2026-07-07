@@ -34,8 +34,8 @@ Every client maps to a shared state vocabulary that drives the pet animation and
 the bubble status icons:
 
 `idle`, `thinking`, `running_tool`, `editing_files`, `waiting_user`,
-`waiting_approval`, `reviewing`, `compacting`, `failed`, `success`, `stale`,
-`exited`.
+`waiting_approval`, `reviewing`, `compacting`, `failed`, `interrupted`,
+`success`, `stale`, `exited`.
 
 Bubbles collapse these into four status kinds: **working** (spinner), **done**
 (check), **attention** (yellow), **failed** (red cross).
@@ -77,8 +77,12 @@ Codex's hook command must be unquoted at the program position (it runs via
 `cmd /c`, which strips a leading quote) and its matchers can't use look-around
 (Rust regex) — see [known-issues.md](known-issues.md). Codex's L4 is **partial**:
 `PreToolUse` doesn't fire upstream yet, so tool activity comes from an L3
-transcript watcher tailing the session rollout. `PermissionRequest` fires, but
-once at approval-request creation — before Codex routes the request to either
+transcript watcher tailing the session rollout; the same watcher also treats
+`token_count` rate-limit markers and empty `task_complete` records as turn-ending
+signals, reporting usage/provider-limit failures as the existing non-terminal
+`interrupted` state so provider-side warnings do not leave the pet thinking and
+do not make the live session bubble disappear as a finished failure.
+`PermissionRequest` fires, but once at approval-request creation — before Codex routes the request to either
 the user or its guardian auto-reviewer ("Approve for me"), which never prompts
 the user at all. The hook therefore calls a Codex-specific permission reporter:
 when the resolved Codex config says `approvals_reviewer = "auto_review"` (or the

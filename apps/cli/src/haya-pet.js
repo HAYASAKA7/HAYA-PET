@@ -491,7 +491,8 @@ async function runRunCommand(parsed, dependencies) {
           event: event.type,
           toolCallId: event.toolCallId,
           toolName: event.toolName,
-          state: event.state
+          state: event.state ?? (event.type === "usage_limit_reached" || event.type === "turn_failed" ? "interrupted" : undefined),
+          limitType: event.limitType
         });
 
         // Esc-interrupt fires no Stop hook, so without this the pet stays stuck
@@ -505,6 +506,54 @@ async function runRunCommand(parsed, dependencies) {
               state: "interrupted",
               summary: "interrupted",
               confidence: 0.9,
+              source: "client_log",
+              updatedAt: now()
+            })
+            .catch(() => {});
+          return;
+        }
+
+        if (event.type === "usage_limit_reached") {
+          activeToolCalls.clear();
+          messageSender
+            .send({
+              type: "state",
+              sessionId,
+              state: "interrupted",
+              summary: "usage limit reached",
+              confidence: 0.9,
+              source: "client_log",
+              updatedAt: now()
+            })
+            .catch(() => {});
+          return;
+        }
+
+        if (event.type === "turn_failed") {
+          activeToolCalls.clear();
+          messageSender
+            .send({
+              type: "state",
+              sessionId,
+              state: "interrupted",
+              summary: "model response failed",
+              confidence: 0.9,
+              source: "client_log",
+              updatedAt: now()
+            })
+            .catch(() => {});
+          return;
+        }
+
+        if (event.type === "turn_complete") {
+          activeToolCalls.clear();
+          messageSender
+            .send({
+              type: "state",
+              sessionId,
+              state: "idle",
+              summary: "turn complete",
+              confidence: 0.85,
               source: "client_log",
               updatedAt: now()
             })

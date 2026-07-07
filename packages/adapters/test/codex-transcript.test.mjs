@@ -105,6 +105,46 @@ test("parseCodexTranscriptLine detects a user-interrupted turn", () => {
   assert.deepEqual(event, { type: "turn_aborted", reason: "interrupted" });
 });
 
+test("parseCodexTranscriptLine detects a reached Codex usage limit", () => {
+  const event = parseCodexTranscriptLine(JSON.stringify({
+    type: "event_msg",
+    payload: {
+      type: "token_count",
+      rate_limits: {
+        limit_id: "codex",
+        rate_limit_reached_type: "primary"
+      }
+    }
+  }));
+
+  assert.deepEqual(event, { type: "usage_limit_reached", limitType: "primary" });
+});
+
+test("parseCodexTranscriptLine reports a normal completed turn", () => {
+  const event = parseCodexTranscriptLine(JSON.stringify({
+    type: "event_msg",
+    payload: {
+      type: "task_complete",
+      last_agent_message: "done",
+      time_to_first_token_ms: 250
+    }
+  }));
+
+  assert.deepEqual(event, { type: "turn_complete" });
+});
+
+test("parseCodexTranscriptLine reports a failed turn when Codex completes without a model response", () => {
+  const event = parseCodexTranscriptLine(JSON.stringify({
+    type: "event_msg",
+    payload: {
+      type: "task_complete",
+      last_agent_message: null,
+      duration_ms: 4430
+    }
+  }));
+
+  assert.deepEqual(event, { type: "turn_failed", reason: "empty_response" });
+});
 test("parseCodexTranscriptLine skips a turn_aborted older than the session start", () => {
   const old = JSON.stringify({
     timestamp: "2026-06-08T10:59:59.000Z",
