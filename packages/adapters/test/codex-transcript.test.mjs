@@ -145,6 +145,28 @@ test("parseCodexTranscriptLine reports a failed turn when Codex completes withou
 
   assert.deepEqual(event, { type: "turn_failed", reason: "empty_response" });
 });
+test("parseCodexTranscriptLines ignores Codex manual compact's empty completion", () => {
+  const parserState = {};
+  const compacted = JSON.stringify({
+    type: "event_msg",
+    payload: { type: "context_compacted" }
+  });
+  const emptyCompletion = JSON.stringify({
+    type: "event_msg",
+    payload: {
+      type: "task_complete",
+      turn_id: "019f3f3a-92c8-7f43-be08-c4fd1311cbe9",
+      last_agent_message: null,
+      completed_at: 1783472266,
+      duration_ms: 35023
+    }
+  });
+
+  assert.deepEqual(parseCodexTranscriptLines([compacted], { parserState }), [
+    { type: "context_compacted" }
+  ]);
+  assert.deepEqual(parseCodexTranscriptLines([emptyCompletion], { parserState }), []);
+});
 test("parseCodexTranscriptLine skips a turn_aborted older than the session start", () => {
   const old = JSON.stringify({
     timestamp: "2026-06-08T10:59:59.000Z",

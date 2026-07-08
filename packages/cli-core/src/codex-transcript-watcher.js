@@ -38,6 +38,7 @@ export function watchCodexTranscript(options = {}) {
   let transcriptPath = fixedPath;
   let offset = 0;
   let carry = "";
+  const parserState = {};
 
   const tick = () => {
     try {
@@ -70,7 +71,7 @@ export function watchCodexTranscript(options = {}) {
       const lines = (carry + chunk).split("\n");
       carry = lines.pop() ?? "";
 
-      for (const event of parseCodexTranscriptLines(lines, { minTimestampMs: startedAt })) {
+      for (const event of parseCodexTranscriptLines(lines, { minTimestampMs: startedAt, parserState })) {
         onToolEvent(event);
       }
     } catch {

@@ -7,6 +7,15 @@ All notable changes to HAYA Pet are documented here. This project adheres to
 > 0.2.0 npm publish; they are listed under 0.2.1, which is the first version that
 > ships them.
 
+## [0.3.20]
+
+### Fixed
+- **Codex manual compact no longer looks like a model failure.** The Codex
+  transcript watcher now treats `context_compacted` followed by an empty
+  `task_complete` as compact bookkeeping, preserving the `PostCompact` hook's
+  **compacted/idle** state while still reporting provider-limit empty completions
+  as non-terminal **interrupted** states.
+
 ## [0.3.19]
 
 ### Fixed

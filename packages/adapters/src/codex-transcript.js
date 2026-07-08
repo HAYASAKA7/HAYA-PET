@@ -48,6 +48,10 @@ export function parseCodexTranscriptLine(line, options = {}) {
       }
     }
 
+    if (payload.type === "context_compacted") {
+      return { type: "context_compacted" };
+    }
+
     if (payload.type === "task_complete") {
       const hasFinalMessage = typeof payload.last_agent_message === "string" && payload.last_agent_message.trim() !== "";
       const sawFirstToken = Number.isFinite(payload.time_to_first_token_ms);
@@ -89,14 +93,34 @@ export function parseCodexTranscriptLine(line, options = {}) {
 
 export function parseCodexTranscriptLines(lines, options = {}) {
   const events = [];
+  const parserState = options.parserState && typeof options.parserState === "object" ? options.parserState : {};
   for (const line of lines) {
     if (typeof line !== "string" || line.trim() === "") {
       continue;
     }
     const event = parseCodexTranscriptLine(line, options);
-    if (event) {
-      events.push(event);
+    if (!event) {
+      continue;
     }
+
+    if (event.type === "context_compacted") {
+      parserState.afterContextCompacted = true;
+      events.push(event);
+      continue;
+    }
+
+    // Manual /compact writes context_compacted and then an empty task_complete.
+    // PostCompact hooks already report the visible state, so this completion is
+    // bookkeeping, not a provider/model failure.
+    if (event.type === "turn_failed" && event.reason === "empty_response" && parserState.afterContextCompacted) {
+      parserState.afterContextCompacted = false;
+      continue;
+    }
+
+    if (event.type === "turn_complete" || event.type === "turn_aborted" || event.type === "usage_limit_reached") {
+      parserState.afterContextCompacted = false;
+    }
+    events.push(event);
   }
   return events;
 }

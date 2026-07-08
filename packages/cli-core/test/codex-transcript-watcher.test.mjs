@@ -32,6 +32,28 @@ function turnAborted(timestamp) {
   })}\n`;
 }
 
+function contextCompacted(timestamp) {
+  return `${JSON.stringify({
+    ...(timestamp ? { timestamp } : {}),
+    type: "event_msg",
+    payload: { type: "context_compacted" }
+  })}\n`;
+}
+
+function emptyTaskComplete(turnId = "turn_compact", timestamp) {
+  return `${JSON.stringify({
+    ...(timestamp ? { timestamp } : {}),
+    type: "event_msg",
+    payload: {
+      type: "task_complete",
+      turn_id: turnId,
+      last_agent_message: null,
+      completed_at: 1783472266,
+      duration_ms: 35023
+    }
+  })}\n`;
+}
+
 test("discoverCodexTranscript finds the newest session jsonl under date folders", () => {
   const root = mkdtempSync(join(tmpdir(), "codex-sessions-"));
   const oldDir = join(root, "2026", "06", "07");
@@ -233,6 +255,28 @@ test("watchCodexTranscript follows a fresh resumed session in the same cwd", () 
   watcher.stop();
 });
 
+test("watchCodexTranscript ignores manual compact's empty completion across polls", () => {
+  const dir = mkdtempSync(join(tmpdir(), "codex-transcript-"));
+  const path = join(dir, "session.jsonl");
+  writeFileSync(path, "");
+
+  const events = [];
+  const watcher = watchCodexTranscript({
+    transcriptPath: path,
+    onToolEvent: (event) => events.push(event),
+    ...noopTimers
+  });
+
+  watcher._tick();
+  appendFileSync(path, contextCompacted());
+  watcher._tick();
+  appendFileSync(path, emptyTaskComplete());
+  watcher._tick();
+
+  assert.deepEqual(events, [{ type: "context_compacted" }]);
+
+  watcher.stop();
+});
 test("watchCodexTranscript forwards a turn_aborted interrupt event", () => {
   const dir = mkdtempSync(join(tmpdir(), "codex-transcript-"));
   const path = join(dir, "session.jsonl");

@@ -2,6 +2,21 @@
 
 Issues found in live use, with their current status.
 
+## ✅ Resolved: Codex manual compact could look like a model failure
+
+- **Symptom:** After a manual Codex `/compact` finished, the pet could switch to
+  **model response failed** even though compaction succeeded and the Codex session
+  was still usable.
+- **Root cause:** Codex writes a `context_compacted` transcript event and then an
+  empty `task_complete` bookkeeping record for that compact turn. The 0.3.19
+  usage-limit fix treated every empty `task_complete` as a provider/model failure,
+  so the transcript watcher overwrote the `PostCompact` hook's correct
+  `idle --summary compacted` state.
+- **Fix:** The Codex transcript parser now remembers `context_compacted` across
+  watcher polls and suppresses only the immediately following empty completion.
+  Provider-limit empty completions without that compact marker still report the
+  non-terminal `interrupted` state.
+
 ## ✅ Resolved: Codex usage-limit exhaustion left sessions thinking
 
 - **Symptom:** When Codex hit an AI subscription or usage limit mid-turn, the pet
@@ -18,7 +33,8 @@ Issues found in live use, with their current status.
 - **Fix:** `parseCodexTranscriptLine` now normalizes non-empty
   `rate_limit_reached_type` values into `usage_limit_reached`, normal
   `task_complete` records into `turn_complete`, and empty completions into
-  `turn_failed`. The Codex wrapper clears active tool tracking and emits the
+  `turn_failed`, except for the empty bookkeeping completion immediately after
+  `context_compacted`. The Codex wrapper clears active tool tracking and emits the
   existing non-terminal `interrupted` state for the failure cases or `idle` for
   normal completion, so the bubble leaves the spinner without being treated as a
   finished session. Regression tests cover both parser and wrapper status paths,

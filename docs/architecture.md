@@ -81,7 +81,10 @@ transcript watcher tailing the session rollout; the same watcher also treats
 `token_count` rate-limit markers and empty `task_complete` records as turn-ending
 signals, reporting usage/provider-limit failures as the existing non-terminal
 `interrupted` state so provider-side warnings do not leave the pet thinking and
-do not make the live session bubble disappear as a finished failure.
+do not make the live session bubble disappear as a finished failure. The empty
+completion rule deliberately skips the bookkeeping `task_complete` immediately
+after Codex `context_compacted`, because manual `/compact` is already resolved
+by `PostCompact` hooks.
 `PermissionRequest` fires, but once at approval-request creation — before Codex routes the request to either
 the user or its guardian auto-reviewer ("Approve for me"), which never prompts
 the user at all. The hook therefore calls a Codex-specific permission reporter:
