@@ -113,18 +113,28 @@ L2/PTY tradeoffs.
 
 ## Overlay model
 
-The overlay is a transparent, always-on-top window spanning the work area, kept
-click-through except over the pet and bubble chips (via `setIgnoreMouseEvents`
-with mouse-move forwarding). Over the pet the hit test is **pixel-precise**: the
-renderer samples the live canvas (`getImageData`) at the cursor and only
-intercepts where the current frame has opaque pixels, so the transparent margins
-of the sprite cell pass clicks through too. The press/drag is held interactive
-for its whole duration (the running frames have a different silhouette), and the
-resize grip keeps its own bounding-box reveal so pixel precision never hides it
-(`pet-hit-test.js`, `pet-window.js`). The pet is positioned inside the window and
-dragged via CSS; the bubble panel is placed on whichever side of the pet has room
-so it stays fully on-screen. The pet currently lives on a single display's work
-area.
+The overlay is a transparent, always-on-top BrowserWindow whose bounds span the
+current work area for placement math, but the native window shape is kept small:
+the renderer measures the pet canvas, folder toggle, and visible bubble list and
+sends those rectangles to the main process. On platforms where Electron supports
+`BrowserWindow.setShape` (Windows/Linux), the OS only permits drawing and mouse
+events inside those regions; outside them, pixels and mouse events fall through
+to the app underneath. This matters because `setIgnoreMouseEvents(false)` is a
+native-window switch, not a DOM-only switch; without shaping, dragging the pet
+would temporarily expose a desktop-sized transparent Chromium surface over video
+or another Electron renderer.
+
+The overlay is still kept click-through except over the pet and bubble chips
+(via `setIgnoreMouseEvents` with mouse-move forwarding). Over the pet the hit
+test is **pixel-precise**: the renderer samples the live canvas (`getImageData`)
+at the cursor and only intercepts where the current frame has opaque pixels, so
+the transparent margins of the sprite cell pass clicks through too. The press/
+drag is held interactive for its whole duration (the running frames have a
+different silhouette), and the resize grip keeps its own bounding-box reveal so
+pixel precision never hides it (`pet-hit-test.js`, `pet-window.js`). The pet is
+positioned inside the window and dragged via CSS; the bubble panel is placed on
+whichever side of the pet has room so it stays fully on-screen. The pet currently
+lives on a single display's work area.
 
 The companion treats the overlay BrowserWindow as replaceable runtime state. If a
 real renderer or GPU process crash (`crashed`, `oom`, `launch-failed`, or
@@ -132,7 +142,10 @@ real renderer or GPU process crash (`crashed`, `oom`, `launch-failed`, or
 the main process logs the event to `overlay-crash.log`, destroys the dead window,
 recreates it, and re-homes it onto a valid display without overwriting the user's
 preferred display. Normal app shutdown is ignored, duplicate GPU+renderer events
-are coalesced, and a small consecutive-crash cap prevents a recreate loop.
+are coalesced, and a small consecutive-crash cap prevents a recreate loop. User
+restore gestures (Show, Reset Position, second-instance launch) also recreate the
+BrowserWindow so an alive-but-unpaintable compositor surface can recover even when
+Electron did not emit a crash event.
 
 The bubble panel shows at most three sessions and scrolls for the rest (capped
 by the smaller of a height budget and a count budget, see

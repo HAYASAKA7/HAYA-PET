@@ -20,6 +20,7 @@ import { resolveBubbleListMaxHeight } from "../main/bubble-list-viewport.js";
 import { createInteractionController } from "./interaction-controller.js";
 import { createBubbleList } from "./session-bubbles.js";
 import { isOpaqueAlpha, isPointInsideRect } from "./pet-hit-test.js";
+import { buildOverlayShapeRects, sameOverlayShape } from "./overlay-shape.js";
 
 const bridge = window.aiPet;
 const petEl = document.getElementById("pet");
@@ -66,6 +67,8 @@ let petScale = DEFAULT_SCALE;
 let lingerState = {};
 let lingerTimer;
 let lastBubblesPayload = [];
+let shapeFrame;
+let lastShapeRects = [];
 
 function setupPet(config) {
   if (config?.pet?.manifest) {
@@ -122,6 +125,7 @@ function clampPetLocal(pos) {
 function placePanel() {
   const rect = panelEl.getBoundingClientRect();
   if (!rect.width || !rect.height) {
+    scheduleOverlayShape();
     return; // nothing to place (no active sessions)
   }
 
@@ -147,6 +151,8 @@ function placePanel() {
     const bubbleBottoms = Array.from(list.children, (child) => child.offsetTop + child.offsetHeight);
     list.style.maxHeight = `${resolveBubbleListMaxHeight({ room, bubbleBottoms })}px`;
   }
+
+  scheduleOverlayShape();
 }
 
 function frameLoop(now) {
@@ -293,6 +299,13 @@ gripEl.addEventListener("dblclick", () => {
 // Re-clamp and re-place when the work area changes (display/resolution change).
 window.addEventListener("resize", () => {
   applyPetPosition(petLocal);
+  scheduleOverlayShape();
+});
+
+panelEl.addEventListener("transitionend", (event) => {
+  if (event.target?.classList?.contains("bubble-list")) {
+    scheduleOverlayShape();
+  }
 });
 
 // --- Session wiring ---
@@ -336,6 +349,61 @@ function renderBubbles() {
     lingerTimer = setTimeout(renderBubbles, nextWakeMs);
   }
   refreshMouseIgnore(lastPointer.x, lastPointer.y);
+}
+
+// --- Native overlay shape ---
+//
+// The BrowserWindow spans the work area for simple placement math, but the OS
+// should only see the pet and bubble panel as drawable/hit-test regions. Without
+// this, setIgnoreMouseEvents(false) during a drag makes the whole desktop-sized
+// transparent window a topmost Chromium surface, which can interfere with other
+// Chromium/Electron video and terminal renderers.
+
+function scheduleOverlayShape() {
+  if (shapeFrame !== undefined) {
+    return;
+  }
+  shapeFrame = requestAnimationFrame(() => {
+    shapeFrame = undefined;
+    refreshOverlayShape();
+  });
+}
+
+function refreshOverlayShape() {
+  const rects = buildOverlayShapeRects({
+    viewport: { width: window.innerWidth, height: window.innerHeight },
+    rects: collectOverlayShapeRects()
+  });
+  if (sameOverlayShape(rects, lastShapeRects)) {
+    return;
+  }
+  lastShapeRects = rects;
+  bridge?.setWindowShape?.(rects);
+}
+
+function collectOverlayShapeRects() {
+  const rects = [canvas.getBoundingClientRect()];
+  const folder = panelEl.querySelector(".folder-toggle");
+  const list = panelEl.querySelector(".bubble-list");
+  if (isElementVisibleForShape(folder)) {
+    rects.push(folder.getBoundingClientRect());
+  }
+  if (isElementVisibleForShape(list)) {
+    rects.push(list.getBoundingClientRect());
+  }
+  return rects;
+}
+
+function isElementVisibleForShape(el) {
+  if (!el) {
+    return false;
+  }
+  const style = window.getComputedStyle(el);
+  if (style.display === "none" || style.visibility === "hidden") {
+    return false;
+  }
+  const rect = el.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
 }
 
 // --- Click-through forwarding ---
@@ -420,6 +488,7 @@ if (bridge) {
   bridge.onSessions(applySessions);
   bridge.onPetPosition?.(applyPetPosition);
   bridge.listSessions().then(applySessions).catch(() => {});
+  scheduleOverlayShape();
 }
 
 requestAnimationFrame(frameLoop);

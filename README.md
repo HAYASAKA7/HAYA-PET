@@ -279,7 +279,8 @@ skipped when output is piped, and fully disabled with
 | No pet appears for a session | Start the AI client through `haya-pet run ...`. |
 | Pet shows a placeholder | Add a pet folder with both `pet.json` and `spritesheet.webp`. |
 | Pet is off-screen | Use tray menu -> **Reset Position**. |
-| Pet vanishes while tray/process still runs | Update to 0.3.16 or newer. HAYA Pet recreates the overlay after GPU/renderer crashes and logs details to `overlay-crash.log` in the HAYA Pet log directory. |
+| Pet vanishes while tray/process still runs | Update to 0.3.21 or newer. HAYA Pet recreates the overlay after GPU/renderer crashes and also rebuilds alive-but-unpaintable compositor surfaces on Show/Reset. |
+| Dragging the pet blanks browser video or another Electron terminal | Update to 0.3.21 or newer. The overlay now shapes the native window around only the pet and visible bubbles instead of exposing a desktop-sized transparent surface during drag. |
 | Overlay will not exit | Run `haya-pet stop` or tray menu -> **Quit**. |
 
 More fixes are in [docs/troubleshooting.md](docs/troubleshooting.md), including

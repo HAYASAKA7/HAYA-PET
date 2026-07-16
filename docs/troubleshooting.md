@@ -11,7 +11,8 @@ deferred problems with known root causes.
 | Pet shows complete/working while an approval prompt is waiting | Fixed — update to the latest version. See "Approval prompt hidden by idle/working" below. |
 | Pet shows a blue placeholder box | No spritesheet found — add a pet (see the README); behaviour is otherwise correct. |
 | Pet is off-screen / can't find it | Tray icon → **Reset Position**. |
-| Pet vanished but the tray icon/process is still running | Fixed in 0.3.16 — update to the latest version. GPU/renderer crashes now recreate the overlay. If it repeats, check `overlay-crash.log` under `%LOCALAPPDATA%\haya-pet\logs` on Windows or `~/.haya-pet/logs` on macOS/Linux. |
+| Pet vanished but the tray icon/process is still running | Fixed in 0.3.16 for real GPU/renderer crashes, and improved in 0.3.21 for alive-but-unpaintable compositor surfaces. Update to the latest version and restart the companion. If an actual crash repeats, check `overlay-crash.log` under `%LOCALAPPDATA%\haya-pet\logs` on Windows or `~/.haya-pet/logs` on macOS/Linux. |
+| Dragging HAYA Pet makes YouTube/Chrome video or another Electron terminal blank | Fixed in 0.3.21 — update and restart the companion. The overlay now applies a native window shape around only the pet and visible bubbles, so dragging no longer exposes a desktop-sized transparent topmost Chromium surface over the app underneath. |
 | Can't exit the pet | `haya-pet stop`, or right-click the tray icon → **Quit**. |
 | `haya-pet pets` shows "No pets found" | Add a pet folder with **both** `pet.json` and a spritesheet to a search path. |
 | Terminal scroll / Shift+Tab / backspace odd while a CLI runs under `haya-pet run` | Fixed — `haya-pet run` now uses native passthrough by default (full fidelity). If you opted into `--observe`, drop it. See [known-issues.md](known-issues.md). |

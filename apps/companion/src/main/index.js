@@ -94,6 +94,7 @@ let updateAvailable;
 const overlayCrashPolicy = createOverlayCrashPolicy();
 let quittingApp = false;
 let overlayRecovering = false;
+let overlayShapeKey = "";
 
 // Electron singleton: a second launch forwards to the running instance.
 if (!app.requestSingleInstanceLock()) {
@@ -192,6 +193,7 @@ function createPetWindow() {
   applyOverlayPlacement(resolveCurrentPlacement());
 
   const { browserWindow } = buildPetWindowOptions({ capabilities, bounds: currentWorkArea });
+  overlayShapeKey = "";
 
   petWindow = new BrowserWindow({
     ...browserWindow,
@@ -208,6 +210,10 @@ function createPetWindow() {
   // desktop; the renderer re-enables interaction (via haya-pet:set-mouse-ignore)
   // only over the pet + bubbles.
   petWindow.setIgnoreMouseEvents(true, { forward: true });
+  // Shape the native window immediately to the pet bounds; the renderer expands
+  // this to include bubbles once it has measured the DOM. This avoids exposing a
+  // desktop-sized transparent surface during startup.
+  applyOverlayShape([{ x: petLocal.x, y: petLocal.y, ...scaledPetSize() }]);
   petWindow.loadFile(join(__dirname, "..", "renderer", "index.html"));
   petWindow.webContents.on("did-finish-load", () => {
     // A finished load means the (possibly recreated) overlay is painting again,
@@ -234,7 +240,7 @@ function createPetWindow() {
 // be rebuilt; createPetWindow re-resolves placement and the follow-up re-home puts
 // it on a currently-valid display and shows it. persist:false keeps the user's
 // preferred-display memory intact (as with automatic display re-homes).
-function recreatePetWindow() {
+function recreatePetWindow(rehomeOptions = { persist: false }) {
   const previous = petWindow;
   petWindow = undefined;
   try {
@@ -243,7 +249,7 @@ function recreatePetWindow() {
     // destroying an already-dead window is fine
   }
   createPetWindow();
-  rehomeOverlay({ persist: false });
+  rehomeOverlay({ persist: false, ...rehomeOptions });
 }
 
 // Decide-and-act on an overlay crash: log it (always), then recreate the window
@@ -284,6 +290,47 @@ function logOverlayCrash(entry) {
   } catch {
     // logging a crash must never crash the daemon
   }
+}
+
+function applyOverlayShape(rects) {
+  if (!petWindow || petWindow.isDestroyed() || typeof petWindow.setShape !== "function") {
+    return;
+  }
+  if (capabilities.transparentOverlay !== "required") {
+    return;
+  }
+  const safeRects = sanitizeOverlayShapeRects(rects);
+  if (safeRects.length === 0) {
+    return;
+  }
+  const key = JSON.stringify(safeRects);
+  if (key === overlayShapeKey) {
+    return;
+  }
+  try {
+    petWindow.setShape(safeRects);
+    overlayShapeKey = key;
+  } catch (error) {
+    logOverlayCrash({ kind: "overlay-shape-failed", message: error?.message });
+  }
+}
+
+function sanitizeOverlayShapeRects(rects) {
+  if (!Array.isArray(rects)) {
+    return [];
+  }
+  const bounds = currentWorkArea ?? { width: 0, height: 0 };
+  const maxWidth = Number.isFinite(bounds.width) ? bounds.width : 0;
+  const maxHeight = Number.isFinite(bounds.height) ? bounds.height : 0;
+  return rects.flatMap((rect) => {
+    const x = Math.max(0, Math.floor(Number(rect?.x)));
+    const y = Math.max(0, Math.floor(Number(rect?.y)));
+    const right = Math.min(maxWidth, Math.ceil(Number(rect?.x) + Number(rect?.width)));
+    const bottom = Math.min(maxHeight, Math.ceil(Number(rect?.y) + Number(rect?.height)));
+    const width = right - x;
+    const height = bottom - y;
+    return width > 0 && height > 0 ? [{ x, y, width, height }] : [];
+  });
 }
 
 function scaledPetSize() {
@@ -554,6 +601,10 @@ function registerRendererHandlers() {
     }
   });
 
+  ipcMain.on("haya-pet:set-window-shape", (_event, rects) => {
+    applyOverlayShape(rects);
+  });
+
   // Right-click on the pet pops up the same menu as the tray icon (built from
   // the one pure tray model), since the tray icon is often buried in the Windows
   // overflow. Fire-and-forget: the native menu is shown and dispatched in main.
@@ -646,40 +697,32 @@ function togglePet() {
   if (!petWindow || petWindow.isDestroyed()) {
     // The window was torn down (e.g. a stray close the quit-guard kept from
     // killing the app); rebuild it rather than no-op on a dead reference.
-    recreatePetWindow();
+    recreatePetWindow({ persist: true });
     refreshTrayMenu();
     return;
   }
   if (petWindow.isVisible()) {
     petWindow.hide();
   } else {
-    // Re-home on show: a stranded (off-screen) window still reports isVisible()
-    // === true, so the user's first click hides it and this second click must put
-    // it back on a valid display, not just show it at the same bad bounds.
-    rehomeOverlay();
+    // Recreate on show: a stranded or compositor-lost window can still report
+    // isVisible() === true, so the user's first click hides it and this
+    // second click must put a fresh overlay back on a valid display.
+    recreatePetWindow({ persist: true });
   }
   refreshTrayMenu();
 }
 
 function focusPet() {
-  // Relaunching `haya-pet` (second-instance) is also a "bring it back" gesture, so
-  // re-home — or rebuild the window outright if it was torn down.
-  if (!petWindow || petWindow.isDestroyed()) {
-    recreatePetWindow();
-    return;
-  }
-  rehomeOverlay();
+  // Relaunching `haya-pet` (second-instance) is a restore gesture. Rebuild the
+  // BrowserWindow as well as re-homing it, because a compositor-lost transparent
+  // surface can stay alive while no longer painting.
+  recreatePetWindow({ persist: true });
 }
 
 function resetPosition() {
-  // Re-home onto a valid display FIRST (a stale display layout is exactly when
-  // users reach for Reset), then drop the pet to the bottom-right corner — or
-  // rebuild the window if it was torn down entirely.
-  if (!petWindow || petWindow.isDestroyed()) {
-    recreatePetWindow();
-    return;
-  }
-  rehomeOverlay({ recenter: true });
+  // Reset is also a last-resort visual recovery control. Recreate first so it
+  // can recover an alive-but-unpaintable transparent surface, then recenter.
+  recreatePetWindow({ recenter: true, persist: true });
 }
 
 function setDisplayMode(displayMode) {

@@ -2,6 +2,26 @@
 
 Issues found in live use, with their current status.
 
+## ✅ Resolved: transparent overlay could conflict with video or other Electron rendering
+
+- **Symptom:** Dragging or interacting with HAYA Pet could make YouTube/Chrome
+  video content, or another Electron app terminal renderer, disappear until focus
+  returned to that app. In the worse case the pet itself could vanish while the
+  tray/process stayed alive, and **Reset Position** or Hide/Show did not recover
+  it. No `overlay-crash.log` was written because Electron did not report a
+  renderer or GPU process exit.
+- **Root cause:** HAYA Pet used one transparent, always-on-top BrowserWindow that
+  spanned the whole work area. During pet drag, `setIgnoreMouseEvents(false)`
+  applied at the native window level, so the OS compositor temporarily saw a
+  desktop-sized transparent Chromium surface above other Chromium/Electron
+  renderers. CSS `pointer-events` and pixel hit-testing limited DOM behavior, but
+  they did not shrink the native drawable/hit-test region.
+- **Fix:** The renderer now sends measured native shape rectangles for the pet,
+  folder toggle, and visible bubble list. The main process applies them with
+  `BrowserWindow.setShape` where Electron supports it, seeds the shape to the pet
+  bounds during startup, ignores empty shape updates, and recreates the
+  BrowserWindow for user restore gestures so compositor-lost surfaces can recover.
+
 ## ✅ Resolved: Codex manual compact could look like a model failure
 
 - **Symptom:** After a manual Codex `/compact` finished, the pet could switch to

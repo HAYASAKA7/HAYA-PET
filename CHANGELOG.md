@@ -7,6 +7,22 @@ All notable changes to HAYA Pet are documented here. This project adheres to
 > 0.2.0 npm publish; they are listed under 0.2.1, which is the first version that
 > ships them.
 
+## [0.3.21]
+
+### Fixed
+- **Dragging the pet no longer exposes a desktop-sized transparent compositor surface.**
+  The overlay still spans the work area for placement, but the renderer now
+  reports small native shape rectangles for the pet and visible session controls.
+  On Windows/Linux, Electron applies those with `BrowserWindow.setShape`, so
+  areas outside the pet and bubbles are not drawable or hit-testable at the OS
+  level even while a drag temporarily disables click-through. This reduces the
+  rendering conflict that could blank Chromium/Electron video or terminal
+  surfaces underneath HAYA Pet.
+- **Show/Reset now rebuild alive-but-unpaintable overlays.** If the transparent
+  surface is lost without an Electron renderer/GPU crash event, user restore
+  gestures recreate the BrowserWindow before re-homing or recentering it, so
+  the pet can come back even when no `overlay-crash.log` entry was written.
+
 ## [0.3.20]
 
 ### Fixed
