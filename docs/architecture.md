@@ -155,6 +155,21 @@ than rebuilt — because status pushes and a 2 s linger tick arrive constantly,
 and replacing the node under the cursor would drop an in-progress scroll
 gesture and reset the scroll position.
 
+## Electron Runtime Storage
+
+The companion claims its Electron runtime storage before `app.ready`: it sets the
+app name to `HAYA Pet`, stores Electron `userData`, `sessionData`, and
+`crashDumps` under the HAYA app-data directory, and points Electron logs at the
+same HAYA log root. This matters most for source-checkout and `npm link` runs,
+where multiple local Electron apps may otherwise use generic dev Electron
+Chromium profile/cache locations. HAYA's own state/config files remain in the
+platform paths managed by `platform-core`; Chromium session/cache data is kept in
+separate subdirectories.
+
+The CLI auto-starts the companion as a detached Electron child. Its stdout/stderr
+are appended to `companion.log` in the HAYA log directory, while overlay recovery
+events and main-process exceptions still go to `overlay-crash.log`.
+
 ## Distribution & runtime dependencies
 
 - `electron` is a **runtime dependency** (not just a dev tool), because

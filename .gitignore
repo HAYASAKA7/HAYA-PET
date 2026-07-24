@@ -39,3 +39,6 @@ tmp/
 temp/
 *.tmp
 *.temp
+
+# Local docs
+patents/

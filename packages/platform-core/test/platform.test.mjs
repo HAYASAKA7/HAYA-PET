@@ -41,6 +41,10 @@ test("returns macOS local app paths and Unix socket endpoint", () => {
   assert.equal(paths.ipcEndpoint, "/Users/a/.haya-pet/haya-petd.sock");
   assert.equal(paths.statePath, "/Users/a/.haya-pet/state.json");
   assert.equal(paths.configPath, "/Users/a/.haya-pet/config.json");
+  assert.equal(paths.electronUserDataDir, "/Users/a/.haya-pet/electron-user-data");
+  assert.equal(paths.electronSessionDataDir, "/Users/a/.haya-pet/electron-session-data");
+  assert.equal(paths.crashDumpsDir, "/Users/a/.haya-pet/crash-dumps");
+  assert.equal(paths.companionLogPath, "/Users/a/.haya-pet/logs/companion.log");
   assert.deepEqual(paths.petSearchPaths, [
     "/Users/a/.codex/pets",
     "/Users/a/.haya-pet/pets"
@@ -57,6 +61,10 @@ test("returns Linux local app paths and Unix socket endpoint", () => {
   assert.equal(paths.ipcEndpoint, "/home/a/.haya-pet/haya-petd.sock");
   assert.equal(paths.statePath, "/home/a/.haya-pet/state.json");
   assert.equal(paths.configPath, "/home/a/.haya-pet/config.json");
+  assert.equal(paths.electronUserDataDir, "/home/a/.haya-pet/electron-user-data");
+  assert.equal(paths.electronSessionDataDir, "/home/a/.haya-pet/electron-session-data");
+  assert.equal(paths.crashDumpsDir, "/home/a/.haya-pet/crash-dumps");
+  assert.equal(paths.companionLogPath, "/home/a/.haya-pet/logs/companion.log");
   assert.deepEqual(paths.petSearchPaths, [
     "/home/a/.codex/pets",
     "/home/a/.haya-pet/pets"

@@ -21,6 +21,7 @@ import { buildTrayMenu, buildTrayTooltip } from "./tray-menu.js";
 import { createStateFile } from "./state-file.js";
 import { discoverPetsWithFallback } from "./pet-loader.js";
 import { checkForUpdate, UPDATE_PAGE_URL } from "../../../../packages/app-state/src/update-check.js";
+import { configureElectronStorage } from "./electron-storage.js";
 
 const STALE_SWEEP_INTERVAL_MS = 10_000;
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -66,6 +67,9 @@ function debugLogDaemonMessage(message) {
 }
 
 const paths = getDefaultPaths();
+configureElectronStorage(app, paths, {
+  onError: (entry) => logOverlayCrash({ kind: "electron-storage-path-failed", ...entry })
+});
 const capabilities = getPlatformCapabilities();
 const stateFile = createStateFile({ statePath: paths.statePath });
 

@@ -2,6 +2,25 @@
 
 Issues found in live use, with their current status.
 
+## ✅ Resolved: local Electron runtime could share cache/crash state with other dev Electron apps
+
+- **Symptom:** While running HAYA Pet from a source checkout or npm link, the pet
+  could vanish after another local npm/Electron development app failed. In the
+  captured repro, Vite crashed with `EBUSY` while watching a locked Chrome profile
+  cookie file under that other project's `.tmp` directory. HAYA had no matching
+  `overlay-crash.log` entry, and Windows did not report an `electron.exe` fault.
+- **Root cause:** The Vite stack trace was the other app's own watcher failure,
+  not a HAYA npm dependency problem. HAYA's bug was that the local Electron
+  companion did not claim dedicated Electron runtime paths, so source/dev runs
+  could fall back to shared dev Electron Chromium profile/cache/crash locations.
+  That made HAYA more exposed to unrelated Electron/Chromium renderer and cache
+  churn from other local apps.
+- **Fix:** HAYA Pet 0.3.22 sets a HAYA-specific Electron app name and dedicated
+  `userData`, `sessionData`, and `crashDumps` directories before Electron's
+  `ready` event. The CLI launcher also records detached companion stdout/stderr
+  in `companion.log`, so startup/native failures have diagnostics even when no
+  renderer/GPU crash event reaches `overlay-crash.log`.
+
 ## ✅ Resolved: transparent overlay could conflict with video or other Electron rendering
 
 - **Symptom:** Dragging or interacting with HAYA Pet could make YouTube/Chrome

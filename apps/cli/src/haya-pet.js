@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { realpathSync, appendFileSync, readFileSync } from "node:fs";
+import { realpathSync, appendFileSync, closeSync, mkdirSync, openSync, readFileSync, writeSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
@@ -1020,12 +1020,49 @@ async function defaultLaunchCompanion() {
   }
 
   const companionDir = fileURLToPath(new URL("../../companion", import.meta.url));
-  const child = spawn(electronPath, [companionDir], {
-    detached: true,
-    stdio: "ignore",
-    windowsHide: false
-  });
+  const paths = getDefaultPaths();
+  const logFd = openCompanionLog(paths);
+  let child;
+  try {
+    child = spawn(electronPath, [companionDir], buildCompanionLaunchOptions({ logStream: logFd }));
+  } finally {
+    closeCompanionLog(logFd);
+  }
   child.unref();
+}
+
+export function buildCompanionLaunchOptions({ logStream } = {}) {
+  const output = logStream ?? "ignore";
+  return {
+    detached: true,
+    stdio: ["ignore", output, output],
+    windowsHide: false
+  };
+}
+
+function openCompanionLog(paths) {
+  if (!paths?.companionLogPath || !paths?.logDir) {
+    return undefined;
+  }
+  try {
+    mkdirSync(paths.logDir, { recursive: true });
+    const fd = openSync(paths.companionLogPath, "a");
+    writeSync(fd, `${JSON.stringify({ ts: new Date().toISOString(), kind: "companion-launch" })}\n`);
+    return fd;
+  } catch {
+    return undefined;
+  }
+}
+
+function closeCompanionLog(fd) {
+  if (!Number.isInteger(fd)) {
+    return;
+  }
+  try {
+    closeSync(fd);
+  } catch {
+    // best-effort diagnostics only
+  }
 }
 
 async function noopSend() {}

@@ -7,6 +7,12 @@ All notable changes to HAYA Pet are documented here. This project adheres to
 > 0.2.0 npm publish; they are listed under 0.2.1, which is the first version that
 > ships them.
 
+## [0.3.22]
+
+### Fixed
+- **Local Electron companions no longer share Chromium profile/cache paths with other dev Electron apps.** When HAYA Pet is launched from a source checkout or npm link, the companion now sets a dedicated Electron app name plus `userData`, `sessionData`, and `crashDumps` paths under HAYA's app-data directory before Electron is ready. That keeps Chromium cache/GPU/session/crash state out of the generic dev Electron profile and away from other local Electron apps.
+- **Detached companion output is now logged.** The CLI launcher writes companion stdout/stderr to `companion.log` in the HAYA log directory instead of discarding it, so startup/native failures that do not reach `overlay-crash.log` have a place to land.
+
 ## [0.3.21]
 
 ### Fixed

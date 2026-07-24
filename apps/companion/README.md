@@ -80,6 +80,10 @@ so the companion starts with your last selected pet.
   is click-through except over the pet and bubbles.
 - The main process recreates the overlay after real GPU/renderer crashes and
   writes `overlay-crash.log` in the platform log directory for diagnostics.
+- The companion sets HAYA-owned Electron `userData`, `sessionData`, and crash
+  dump paths before startup, and detached launcher output goes to
+  `companion.log`, so local dev Electron apps do not share Chromium runtime
+  state with HAYA Pet.
 - All IPC is local-only; nothing is sent to the network.
 - When the parked reply/approval surface is wired up, replies will be gated by
   adapter capability (wrapper-only clients can't inject text blindly) and
