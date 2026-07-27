@@ -78,6 +78,7 @@ test("reports platform capabilities and Wayland fallbacks", () => {
     transparentOverlay: "required",
     terminalAttachment: "best-effort",
     displayManagement: "required",
+    mouseMoveForwarding: "required",
     fallbackMode: "none"
   });
 
@@ -88,5 +89,9 @@ test("reports platform capabilities and Wayland fallbacks", () => {
   assert.equal(
     getPlatformCapabilities({ platform: "linux", env: { WAYLAND_DISPLAY: "wayland-0" } }).transparentOverlay,
     "best-effort"
+  );
+  assert.equal(
+    getPlatformCapabilities({ platform: "linux", env: { DISPLAY: ":0" } }).mouseMoveForwarding,
+    "unsupported"
   );
 });

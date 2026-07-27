@@ -71,6 +71,7 @@ configureElectronStorage(app, paths, {
   onError: (entry) => logOverlayCrash({ kind: "electron-storage-path-failed", ...entry })
 });
 const capabilities = getPlatformCapabilities();
+const canForwardMouseMoves = capabilities.mouseMoveForwarding === "required";
 const stateFile = createStateFile({ statePath: paths.statePath });
 
 let petWindow;
@@ -213,7 +214,7 @@ function createPetWindow() {
   // The whole work area is covered, so empty area MUST pass clicks through to the
   // desktop; the renderer re-enables interaction (via haya-pet:set-mouse-ignore)
   // only over the pet + bubbles.
-  petWindow.setIgnoreMouseEvents(true, { forward: true });
+  petWindow.setIgnoreMouseEvents(canForwardMouseMoves, { forward: true });
   // Shape the native window immediately to the pet bounds; the renderer expands
   // this to include bubbles once it has measured the DOM. This avoids exposing a
   // desktop-sized transparent surface during startup.
@@ -601,6 +602,10 @@ function registerRendererHandlers() {
   // fire-and-forget channel (no round-trip) to toggle click-through.
   ipcMain.on("haya-pet:set-mouse-ignore", (_event, ignore) => {
     if (petWindow && !petWindow.isDestroyed()) {
+      if (!canForwardMouseMoves) {
+        petWindow.setIgnoreMouseEvents(false);
+        return;
+      }
       petWindow.setIgnoreMouseEvents(Boolean(ignore), { forward: true });
     }
   });
@@ -663,6 +668,7 @@ function sendPetConfig() {
       ? { manifest: selected.manifest, spritesheetUrl: selected.spritesheetUrl }
       : undefined,
     overlayMode: capabilities.transparentOverlay === "required" ? "transparent-overlay" : "fallback-window",
+    canForwardMouseMoves,
     petPosition: petLocal,
     petScale
   });

@@ -69,8 +69,17 @@ let lingerTimer;
 let lastBubblesPayload = [];
 let shapeFrame;
 let lastShapeRects = [];
+let canForwardMouseMoves = true;
 
 function setupPet(config) {
+  if (config?.canForwardMouseMoves !== undefined) {
+    canForwardMouseMoves = Boolean(config.canForwardMouseMoves);
+    if (!canForwardMouseMoves) {
+      mouseIgnored = false;
+      bridge?.setMouseIgnore?.(false);
+    }
+  }
+
   if (config?.pet?.manifest) {
     manifest = config.pet.manifest;
   }
@@ -442,6 +451,9 @@ function pointerHitsPetPixel(x, y) {
 }
 
 function refreshMouseIgnore(x, y) {
+  if (!canForwardMouseMoves) {
+    return;
+  }
   // While the grip is captured, the pointer can briefly leave it (the pet only
   // approximately tracks the diagonal); flipping click-through mid-drag would
   // drop the pointerup, so hold interaction until the drag ends. The same holds
@@ -483,8 +495,8 @@ window.addEventListener("mousemove", (event) => {
 });
 
 if (bridge) {
-  bridge.setMouseIgnore?.(true);
   bridge.onConfig(setupPet);
+  bridge.setMouseIgnore?.(canForwardMouseMoves);
   bridge.onSessions(applySessions);
   bridge.onPetPosition?.(applyPetPosition);
   bridge.listSessions().then(applySessions).catch(() => {});
