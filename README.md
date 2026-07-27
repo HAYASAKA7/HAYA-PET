@@ -102,6 +102,27 @@ Minimal `pet.json`:
 The spritesheet format is the Codex-compatible atlas used by this project:
 1536 x 1872 pixels, 8 columns x 9 rows, 192 x 208 per frame.
 
+Pet manifests can also tune animation timing. `frameDurationMs` sets the default
+milliseconds per frame, `actionFrameDurations` overrides that for specific
+actions, and `actionLoopPausesMs` holds the final frame before the next loop.
+
+```json
+{
+  "id": "my-pet",
+  "name": "My Pet",
+  "spritesheet": "spritesheet.webp",
+  "frameDurationMs": 200,
+  "actionFrameDurations": {
+    "idle": 300,
+    "review": 320
+  },
+  "actionLoopPausesMs": {
+    "idle": 1200,
+    "review": 1600
+  }
+}
+```
+
 Choose the pet:
 
 ```bash
