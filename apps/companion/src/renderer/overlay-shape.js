@@ -35,6 +35,31 @@ export function sameOverlayShape(a = [], b = []) {
   });
 }
 
+export function resolveElementLayoutRect(el) {
+  if (!el) {
+    return undefined;
+  }
+
+  const width = finiteNumber(el.offsetWidth);
+  const height = finiteNumber(el.offsetHeight);
+  const offsetLeft = finiteNumber(el.offsetLeft);
+  const offsetTop = finiteNumber(el.offsetTop);
+  const parentRect = el.offsetParent?.getBoundingClientRect?.();
+  const parentLeft = finiteNumber(parentRect?.left ?? parentRect?.x);
+  const parentTop = finiteNumber(parentRect?.top ?? parentRect?.y);
+
+  if ([width, height, offsetLeft, offsetTop, parentLeft, parentTop].every((value) => value !== undefined)) {
+    return rectFromBox(parentLeft + offsetLeft, parentTop + offsetTop, width, height);
+  }
+
+  const rect = el.getBoundingClientRect?.();
+  return normalizeSourceRect(rect);
+}
+
+function rectFromBox(left, top, width, height) {
+  return { left, top, right: left + width, bottom: top + height, width, height };
+}
+
 function normalizeSourceRect(rect) {
   const left = finiteNumber(rect?.left ?? rect?.x);
   const top = finiteNumber(rect?.top ?? rect?.y);

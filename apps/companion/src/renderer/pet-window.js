@@ -19,8 +19,9 @@ import { resolvePanelPlacement } from "../main/panel-placement.js";
 import { resolveBubbleListMaxHeight } from "../main/bubble-list-viewport.js";
 import { createInteractionController } from "./interaction-controller.js";
 import { createBubbleList } from "./session-bubbles.js";
+import { createOverlayHoverClearer } from "./overlay-hover.js";
 import { isOpaqueAlpha, isPointInsideRect } from "./pet-hit-test.js";
-import { buildOverlayShapeRects, sameOverlayShape } from "./overlay-shape.js";
+import { buildOverlayShapeRects, resolveElementLayoutRect, sameOverlayShape } from "./overlay-shape.js";
 
 const bridge = window.aiPet;
 const petEl = document.getElementById("pet");
@@ -389,7 +390,7 @@ function collectOverlayShapeRects() {
     rects.push(folder.getBoundingClientRect());
   }
   if (isElementVisibleForShape(list)) {
-    rects.push(list.getBoundingClientRect());
+    rects.push(resolveElementLayoutRect(list));
   }
   return rects;
 }
@@ -418,6 +419,23 @@ function isElementVisibleForShape(el) {
 let mouseIgnored;
 let petPressed = false; // a press/drag is in progress on the pet canvas
 let lastPointer = { x: -1, y: -1 };
+
+const clearOverlayHover = createOverlayHoverClearer({
+  petEl,
+  isInteractionCaptured: () => Boolean(resizeDrag || petPressed),
+  onPointerCleared: () => {
+    lastPointer = { x: -1, y: -1 };
+  },
+  setMouseIgnore
+});
+
+function setMouseIgnore(ignore) {
+  const next = Boolean(ignore);
+  if (next !== mouseIgnored) {
+    mouseIgnored = next;
+    bridge?.setMouseIgnore?.(next);
+  }
+}
 
 // True when the cursor is over a non-transparent pixel of the current frame. The
 // canvas already holds the current frame at the current scale, so sampling it
@@ -459,11 +477,7 @@ function refreshMouseIgnore(x, y) {
   if (interactiveEl === canvas) {
     interactive = pointerHitsPetPixel(x, y);
   }
-  const ignore = !interactive;
-  if (ignore !== mouseIgnored) {
-    mouseIgnored = ignore;
-    bridge?.setMouseIgnore?.(ignore);
-  }
+  setMouseIgnore(!interactive);
 }
 
 // The resize grip reveals whenever the cursor is over the pet's bounding box —
@@ -481,6 +495,14 @@ window.addEventListener("mousemove", (event) => {
   refreshMouseIgnore(event.clientX, event.clientY);
   refreshGripVisibility(event.clientX, event.clientY);
 });
+
+window.addEventListener("mouseleave", clearOverlayHover);
+window.addEventListener("mouseout", (event) => {
+  if (!event.relatedTarget) {
+    clearOverlayHover();
+  }
+});
+window.addEventListener("blur", clearOverlayHover);
 
 if (bridge) {
   bridge.setMouseIgnore?.(true);

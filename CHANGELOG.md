@@ -7,6 +7,18 @@ All notable changes to HAYA Pet are documented here. This project adheres to
 > 0.2.0 npm publish; they are listed under 0.2.1, which is the first version that
 > ships them.
 
+## [0.3.23]
+
+### Fixed
+- **Session bubble expansion is no longer clipped by the native overlay shape.**
+  The companion now shapes the animated bubble list from its final layout bounds
+  instead of the current CSS transform box, so the expand transition can grow
+  smoothly without the OS window region cutting it off mid-animation.
+- **Hover affordances clear when the pointer leaves the shaped overlay.** The
+  renderer now clears stale resize-grip hover state and restores click-through on
+  overlay leave/blur events, while preserving pointer capture during pet or
+  resize drags.
+
 ## [0.3.22]
 
 ### Fixed
