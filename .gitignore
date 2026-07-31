@@ -42,3 +42,14 @@ temp/
 
 # Local docs
 patents/
+
+# Local agent/project planning artifacts
+CLAUDE.md
+PROGRESS.md
+docs/superpowers/
+
+# Local debug traces
+hooktrace.jsonl
+
+# Local release helper
+release.ps1
