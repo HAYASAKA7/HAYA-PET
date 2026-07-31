@@ -7,6 +7,16 @@ All notable changes to HAYA Pet are documented here. This project adheres to
 > 0.2.0 npm publish; they are listed under 0.2.1, which is the first version that
 > ships them.
 
+## [0.3.24]
+
+### Fixed
+- **Session overlay hover text no longer sticks or disappears completely.** The
+  companion replaces native browser `title` tooltips with an app-controlled
+  overlay tooltip for bubble text, status icons, the folder toggle, and the
+  resize grip. The tooltip is shown only while the pointer/focus is on a labeled
+  target, is included in the native window shape, and still mirrors full labels
+  into `aria-label` for assistive tech.
+
 ## [0.3.23]
 
 ### Fixed

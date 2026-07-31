@@ -20,6 +20,7 @@ import { resolveBubbleListMaxHeight } from "../main/bubble-list-viewport.js";
 import { createInteractionController } from "./interaction-controller.js";
 import { createBubbleList } from "./session-bubbles.js";
 import { createOverlayHoverClearer } from "./overlay-hover.js";
+import { createOverlayTooltip } from "./overlay-tooltip.js";
 import { isOpaqueAlpha, isPointInsideRect } from "./pet-hit-test.js";
 import { buildOverlayShapeRects, resolveElementLayoutRect, sameOverlayShape } from "./overlay-shape.js";
 
@@ -31,6 +32,7 @@ const gripEl = document.getElementById("pet-resize-grip");
 // pointer move (see pointerHitsPetPixel), so keep the canvas CPU-backed.
 const ctx = canvas.getContext("2d", { willReadFrequently: true });
 const panelEl = document.getElementById("bubbles");
+const overlayTooltip = createOverlayTooltip(document.body, { onChange: scheduleOverlayShape });
 
 // The sprite's natural cell size; the canvas is this times the user's scale.
 const BASE_SIZE = Object.freeze({ width: CELL_WIDTH, height: CELL_HEIGHT });
@@ -392,6 +394,9 @@ function collectOverlayShapeRects() {
   if (isElementVisibleForShape(list)) {
     rects.push(resolveElementLayoutRect(list));
   }
+  if (isElementVisibleForShape(overlayTooltip.element)) {
+    rects.push(overlayTooltip.element.getBoundingClientRect());
+  }
   return rects;
 }
 
@@ -426,6 +431,7 @@ const clearOverlayHover = createOverlayHoverClearer({
   onPointerCleared: () => {
     lastPointer = { x: -1, y: -1 };
   },
+  onHoverCleared: () => overlayTooltip.hide(),
   setMouseIgnore
 });
 
@@ -494,6 +500,7 @@ window.addEventListener("mousemove", (event) => {
   lastPointer = { x: event.clientX, y: event.clientY };
   refreshMouseIgnore(event.clientX, event.clientY);
   refreshGripVisibility(event.clientX, event.clientY);
+  overlayTooltip.showForPoint(event.clientX, event.clientY);
 });
 
 window.addEventListener("mouseleave", clearOverlayHover);

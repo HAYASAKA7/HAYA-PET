@@ -6,16 +6,19 @@ test("overlay leave clears stale hover affordances and returns to click-through"
   const petEl = fakePetElement();
   const ignored = [];
   const cleared = [];
+  const tooltipHidden = [];
   const clearHover = createOverlayHoverClearer({
     petEl,
     isInteractionCaptured: () => false,
     onPointerCleared: () => cleared.push(true),
+    onHoverCleared: () => tooltipHidden.push(true),
     setMouseIgnore: (ignore) => ignored.push(ignore)
   });
 
   assert.equal(clearHover(), true);
   assert.equal(petEl.classList.has("show-grip"), false);
   assert.deepEqual(cleared, [true]);
+  assert.deepEqual(tooltipHidden, [true]);
   assert.deepEqual(ignored, [true]);
 });
 

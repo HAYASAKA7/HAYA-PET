@@ -197,7 +197,7 @@ function createFolderButton(onToggle) {
 
 function updateFolderButton(btn, bubbles, collapsed) {
   btn.setAttribute("aria-expanded", String(!collapsed));
-  btn.title = collapsed ? "Show sessions" : "Hide sessions";
+  setTooltipFreeLabel(btn, collapsed ? "Show sessions" : "Hide sessions");
   const [, count, summary] = btn.children;
   count.textContent = String(bubbles.length);
   summary.dataset.kind = mostUrgentKind(bubbles);
@@ -219,7 +219,7 @@ function renderBubble(bubble) {
 
   // Persistent title parts (mutated in place across updates, like everything
   // else here). The client name is always shown in full; the project name is
-  // shown compact (bubble.projectLabel) with the full name kept as a tooltip.
+  // shown compact (bubble.projectLabel) with the full name kept as an aria label.
   const client = document.createElement("span");
   client.className = "client";
   const project = document.createElement("span");
@@ -244,22 +244,31 @@ function applyBubble(el, bubble) {
   const [icon, body] = el.children;
   icon.dataset.kind = bubble.statusKind;
   icon.textContent = STATUS_GLYPH[bubble.statusKind] ?? "";
-  icon.title = bubble.statusLabel;
+  setTooltipFreeLabel(icon, bubble.statusLabel);
 
   const [title, activity] = body.children;
   const [client, project] = title.children;
   client.textContent = bubble.clientName;
   project.textContent = bubble.projectLabel ?? bubble.projectName;
-  // Hover reveals the full, untruncated "Client · Project".
-  title.title = bubble.projectName ? `${bubble.clientName} · ${bubble.projectName}` : bubble.clientName;
+  setTooltipFreeLabel(title, bubble.projectName ? `${bubble.clientName} · ${bubble.projectName}` : bubble.clientName);
   // Compact label keeps a long status/tool name from stretching the bubble; the
-  // full summary stays reachable on hover (like the project name above).
+  // full summary stays available through the controlled overlay tooltip and assistive tech.
   activity.textContent = bubble.summaryLabel ?? bubble.summary;
-  activity.title = `${bubble.summary ?? bubble.statusLabel} · ${bubble.elapsedLabel}`;
+  setTooltipFreeLabel(activity, `${bubble.summary ?? bubble.statusLabel} · ${bubble.elapsedLabel}`);
 }
 
 // Picks the kind that should win the collapsed-folder dot: a failure or a
 // request for attention always beats ongoing work, which beats done/idle.
+function setTooltipFreeLabel(el, label) {
+  const text = String(label ?? "");
+  el.title = "";
+  el.setAttribute("aria-label", text);
+  if (text) {
+    el.dataset.tooltip = text;
+  } else {
+    delete el.dataset.tooltip;
+  }
+}
 const KIND_RANK = Object.freeze({ failed: 0, attention: 1, working: 2, done: 3, idle: 4 });
 function mostUrgentKind(bubbles) {
   let best = "idle";

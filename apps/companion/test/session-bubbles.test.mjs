@@ -179,7 +179,7 @@ test("scrolls to a session when it newly fails", () => {
   }
 });
 
-test("shows the compact project label and keeps the full name as a tooltip", () => {
+test("shows the compact project label and keeps the full name as an aria label", () => {
   const restoreDocument = installFakeDocument();
   try {
     const container = new FakeElement("div");
@@ -200,14 +200,15 @@ test("shows the compact project label and keeps the full name as a tooltip", () 
     const title = childByClass(childByClass(bubble, "body"), "title");
     assert.equal(childByClass(title, "client").textContent, "Claude Code");
     assert.equal(childByClass(title, "project").textContent, "netdisk-se...");
-    // The full, untruncated name stays reachable on hover.
-    assert.equal(title.title, "Claude Code · netdisk-server");
+    assert.equal(title.title, "");
+    assert.equal(title.attributes["aria-label"], "Claude Code · netdisk-server");
+    assert.equal(title.dataset.tooltip, "Claude Code · netdisk-server");
   } finally {
     restoreDocument();
   }
 });
 
-test("shows the compact summary label and keeps the full summary as a tooltip", () => {
+test("shows the compact summary label and keeps the full summary as an aria label", () => {
   const restoreDocument = installFakeDocument();
   try {
     const container = new FakeElement("div");
@@ -228,13 +229,44 @@ test("shows the compact summary label and keeps the full summary as a tooltip", 
     const activity = findActivity(findBubble(container, "s1"));
     // The bubble renders the capped label so a long tool name can't widen it...
     assert.equal(activity.textContent, "Read packages/session-core/src/s...");
-    // ...while the full summary stays reachable on hover.
-    assert.equal(activity.title, "Read packages/session-core/src/summaries.js · 1s");
+    assert.equal(activity.title, "");
+    assert.equal(activity.attributes["aria-label"], "Read packages/session-core/src/summaries.js · 1s");
+    assert.equal(activity.dataset.tooltip, "Read packages/session-core/src/summaries.js · 1s");
   } finally {
     restoreDocument();
   }
 });
 
+
+test("uses controlled overlay tooltips instead of native title tooltips in session controls", () => {
+  const restoreDocument = installFakeDocument();
+  try {
+    const container = new FakeElement("div");
+    const listView = createBubbleList(container, { onRender: createHostOnRender(container) });
+
+    listView.render([{
+      sessionId: "s1",
+      statusKind: "working",
+      statusLabel: "Working",
+      clientName: "Codex",
+      projectName: "haya-pet",
+      summary: "running",
+      elapsedLabel: "1s"
+    }]);
+
+    const button = findButton(container);
+    const bubble = findBubble(container, "s1");
+    const icon = bubble.children[0];
+    assert.equal(button.title, "");
+    assert.equal(button.attributes["aria-label"], "Hide sessions");
+    assert.equal(button.dataset.tooltip, "Hide sessions");
+    assert.equal(icon.title, "");
+    assert.equal(icon.attributes["aria-label"], "Working");
+    assert.equal(icon.dataset.tooltip, "Working");
+  } finally {
+    restoreDocument();
+  }
+});
 test("clears everything when no sessions remain", () => {
   const restoreDocument = installFakeDocument();
   try {

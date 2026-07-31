@@ -86,6 +86,28 @@ body {
   pointer-events: auto;
 }
 
+/* Controlled replacement for native title tooltips. It is shaped with the rest
+   of the overlay and hidden explicitly on hover/focus exit, avoiding delayed
+   browser tooltips that can outlive the actual hover state. */
+.overlay-tooltip {
+  position: absolute;
+  z-index: 20;
+  max-width: min(280px, calc(100vw - 12px));
+  padding: 5px 8px;
+  color: var(--bubble-fg);
+  background: rgba(24, 26, 32, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+
+.overlay-tooltip[hidden] {
+  display: none;
+}
+
 /* --- Folder toggle --- */
 
 .folder-toggle {
