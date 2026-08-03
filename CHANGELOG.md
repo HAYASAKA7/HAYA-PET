@@ -7,6 +7,14 @@ All notable changes to HAYA Pet are documented here. This project adheres to
 > 0.2.0 npm publish; they are listed under 0.2.1, which is the first version that
 > ships them.
 
+## [0.3.25]
+
+### Fixed
+- **Pet right-click menus now dismiss on outside clicks.** The companion no
+  longer parents the pet context menu to the non-focusable transparent overlay
+  window, so clicking blank desktop/app space closes the native menu instead of
+  leaving it open until the pet is clicked again.
+
 ## [0.3.24]
 
 ### Fixed

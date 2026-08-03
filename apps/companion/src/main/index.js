@@ -22,6 +22,7 @@ import { createStateFile } from "./state-file.js";
 import { discoverPetsWithFallback } from "./pet-loader.js";
 import { checkForUpdate, UPDATE_PAGE_URL } from "../../../../packages/app-state/src/update-check.js";
 import { configureElectronStorage } from "./electron-storage.js";
+import { resolvePetMenuPopupOptions } from "./pet-menu-popup.js";
 
 const STALE_SWEEP_INTERVAL_MS = 10_000;
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -616,7 +617,7 @@ function registerRendererHandlers() {
     if (!petWindow || petWindow.isDestroyed()) {
       return;
     }
-    Menu.buildFromTemplate(buildTrayMenuTemplate()).popup({ window: petWindow });
+    Menu.buildFromTemplate(buildTrayMenuTemplate()).popup(resolvePetMenuPopupOptions(petWindow));
   });
 
   // The pet moves within the overlay (CSS), so the renderer reports its new
