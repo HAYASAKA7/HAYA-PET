@@ -47,6 +47,7 @@ patents/
 CLAUDE.md
 PROGRESS.md
 docs/superpowers/
+.worktrees/
 
 # Local debug traces
 hooktrace.jsonl
