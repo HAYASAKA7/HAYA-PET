@@ -1,66 +1,72 @@
-// Resolves stable paths, builds the Codex hook settings, and writes them to the
-// user-level hooks.json inside CODEX_HOME. Codex loads user-level hooks alongside
-// any selected profile, so HAYA Pet does not consume Codex's single -p/--profile
-// slot and custom profiles keep working.
-//
-// Like the Claude injector, the file path and command strings are kept identical
-// across sessions so Codex's hook-trust review only needs approving once. fnm hands
-// out a per-shell symlink for process.execPath that dies when the launching shell
-// exits, so we realpath it before baking it into the hook command.
+// Builds Codex hook overrides for the wrapped process and migrates HAYA-managed
+// hooks out of global Codex configuration. A stable HAYA-owned command record
+// keeps command text unchanged across sessions so Codex can retain hook trust.
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildCodexHookSettings } from "../../adapters/src/codex-hooks.js";
+import {
+  buildCodexHookConfigArgs,
+  buildCodexHookSettings
+} from "../../adapters/src/codex-hooks.js";
 
 const DEFAULT_CLI_PATH = fileURLToPath(new URL("../../../apps/cli/src/haya-pet-hook.js", import.meta.url));
 const HOOKS_FILE = "hooks.json";
+const COMMAND_STATE_FILE = "haya-pet-hook-command.json";
+const COMMAND_STATE_VERSION = 1;
 const HAYA_HOOK_STATUS = "HAYA Pet live status";
 
-export function injectCodexHooks({ nodePath, cliPath, codexHome, env = process.env, profileName } = {}) {
-  const resolvedNode = nodePath ?? safeRealpath(process.execPath);
-  const resolvedCli = cliPath ?? safeRealpath(DEFAULT_CLI_PATH);
+export function injectCodexHooks({
+  nodePath,
+  cliPath,
+  codexHome,
+  commandStatePath,
+  env = process.env,
+  profileName
+} = {}) {
+  const fallback = {
+    nodePath: nodePath ?? safeRealpath(process.execPath),
+    cliPath: cliPath ?? safeRealpath(DEFAULT_CLI_PATH)
+  };
   const home = codexHome ?? env.CODEX_HOME ?? join(homedir(), ".codex");
-
-  // A fixed user-level hook source works with every Codex profile. We merge rather
-  // than overwrite because hooks.json may already contain user hooks.
-  mkdirSync(home, { recursive: true });
   const hooksPath = join(home, HOOKS_FILE);
+  const resolvedCommandStatePath = commandStatePath ?? join(home, COMMAND_STATE_FILE);
+  const hadHooksFile = existsSync(hooksPath);
   const existing = readHooksJson(hooksPath);
-  const commandPaths = reuseExistingHookCommandPaths(existing, {
-    nodePath: resolvedNode,
-    cliPath: resolvedCli
-  });
-  const settings = markManagedHooks(buildCodexHookSettings(commandPaths));
-  const next = mergeHooksJson(existing, settings);
-  writeHooksJsonIfChanged(hooksPath, next);
-  syncSelectedProfileHookTrust({ home, hooksPath, profileName });
 
-  // The hook file is stable and reusable on purpose — leaving it in place is what
-  // lets Codex remember the hooks are trusted. cleanup is a no-op kept for API
-  // symmetry with the caller's finally block.
-  return { hooksPath, cleanup: () => {} };
+  const legacyPaths = findReusableHookCommandPaths(existing);
+  const storedPaths = readCommandState(resolvedCommandStatePath);
+  const commandPaths = legacyPaths
+    ?? (storedPaths && hookCommandPathsExist(storedPaths) ? storedPaths : undefined)
+    ?? fallback;
+
+  writeCommandStateIfChanged(resolvedCommandStatePath, commandPaths);
+  if (hadHooksFile) {
+    writeMigratedHooksIfChanged(hooksPath, existing, removeManagedHooksJson(existing));
+  }
+  removeSelectedProfileLegacyHooks({ home, profileName });
+
+  const settings = markManagedHooks(buildCodexHookSettings(commandPaths));
+  return {
+    configArgs: buildCodexHookConfigArgs(settings),
+    hooksPath,
+    commandStatePath: resolvedCommandStatePath,
+    cleanup: () => {}
+  };
 }
 
-function syncSelectedProfileHookTrust({ home, hooksPath, profileName }) {
+function removeSelectedProfileLegacyHooks({ home, profileName }) {
   if (!home || !isCodexProfileName(profileName)) {
     return;
   }
 
-  const baseConfigPath = join(home, "config.toml");
-  const profileConfigPath = join(home, `${profileName}.config.toml`);
+  const profileConfigPath = join(home, profileName + ".config.toml");
   const profileConfig = readOptionalText(profileConfigPath);
   if (profileConfig === undefined) {
     return;
   }
 
-  const baseConfig = readOptionalText(baseConfigPath);
-  const trustedBlocks = baseConfig === undefined ? [] : extractHookTrustBlocks(baseConfig, hooksPath);
-  let nextProfileConfig = removeLegacyHayaTomlHooks(profileConfig);
-  if (trustedBlocks.length > 0) {
-    nextProfileConfig = replaceHookTrustBlocks(nextProfileConfig, hooksPath, trustedBlocks);
-  }
-
+  const nextProfileConfig = removeLegacyHayaTomlHooks(profileConfig);
   if (nextProfileConfig !== normalizeNewlines(profileConfig)) {
     writeFileSync(profileConfigPath, nextProfileConfig, "utf8");
   }
@@ -119,91 +125,9 @@ function isCodexHookCommandHeader(line) {
   return /^\[\[hooks\.[A-Za-z0-9_]+\.hooks\]\]$/.test(line.trim());
 }
 
-function extractHookTrustBlocks(toml, hooksPath) {
-  const lines = normalizeNewlines(toml).split("\n");
-  const blocks = [];
-
-  for (let index = 0; index < lines.length; index += 1) {
-    const key = parseHookStateKey(lines[index]);
-    if (!key || !isHookStateForHooksPath(key, hooksPath)) {
-      continue;
-    }
-
-    const block = [lines[index]];
-    index += 1;
-    while (index < lines.length && !isTomlTableHeader(lines[index])) {
-      block.push(lines[index]);
-      index += 1;
-    }
-    index -= 1;
-    blocks.push(trimTrailingBlankLines(block).join("\n"));
-  }
-
-  return blocks;
-}
-
-function replaceHookTrustBlocks(toml, hooksPath, trustedBlocks) {
-  const trimmedBlocks = trustedBlocks.map((block) => block.trimEnd()).filter(Boolean);
-  if (trimmedBlocks.length === 0) {
-    return normalizeNewlines(toml);
-  }
-
-  const withoutOldBlocks = removeHookTrustBlocks(toml, hooksPath).trimEnd();
-  const prefix = withoutOldBlocks ? `${withoutOldBlocks}\n\n` : "";
-  const parentTable = /^\[hooks\.state\]\s*$/m.test(withoutOldBlocks) ? "" : "[hooks.state]\n\n";
-  return `${prefix}${parentTable}${trimmedBlocks.join("\n\n")}\n`;
-}
-
-function removeHookTrustBlocks(toml, hooksPath) {
-  const lines = normalizeNewlines(toml).split("\n");
-  const output = [];
-
-  for (let index = 0; index < lines.length; index += 1) {
-    const key = parseHookStateKey(lines[index]);
-    if (!key || !isHookStateForHooksPath(key, hooksPath)) {
-      output.push(lines[index]);
-      continue;
-    }
-
-    index += 1;
-    while (index < lines.length && !isTomlTableHeader(lines[index])) {
-      index += 1;
-    }
-    index -= 1;
-  }
-
-  return output.join("\n");
-}
-
-function parseHookStateKey(line) {
-  const prefix = "[hooks.state.'";
-  const suffix = "']";
-  const trimmed = line.trim();
-  if (!trimmed.startsWith(prefix) || !trimmed.endsWith(suffix)) {
-    return undefined;
-  }
-  return trimmed.slice(prefix.length, -suffix.length);
-}
-
-function isHookStateForHooksPath(key, hooksPath) {
-  const prefix = `${hooksPath}:`;
-  if (process.platform === "win32") {
-    return key.toLowerCase().startsWith(prefix.toLowerCase());
-  }
-  return key.startsWith(prefix);
-}
-
 function isTomlTableHeader(line) {
   const trimmed = line.trim();
   return trimmed.startsWith("[") && trimmed.endsWith("]");
-}
-
-function trimTrailingBlankLines(lines) {
-  const trimmed = [...lines];
-  while (trimmed.length > 0 && trimmed[trimmed.length - 1] === "") {
-    trimmed.pop();
-  }
-  return trimmed;
 }
 
 function normalizeNewlines(text) {
@@ -213,17 +137,13 @@ function normalizeNewlines(text) {
 function isCodexProfileName(value) {
   return typeof value === "string" && /^[A-Za-z0-9_-]+$/.test(value);
 }
+
 function safeRealpath(target) {
   try {
     return realpathSync(target);
   } catch {
     return target;
   }
-}
-
-function reuseExistingHookCommandPaths(existing, fallback) {
-  const reusable = findReusableHookCommandPaths(existing);
-  return reusable ?? fallback;
 }
 
 function findReusableHookCommandPaths(existing) {
@@ -255,10 +175,9 @@ function findReusableHookCommandPaths(existing) {
   }
 
   const [first] = candidates;
-  if (!candidates.every((candidate) => sameHookCommandPaths(candidate, first))) {
-    return undefined;
-  }
-  return first;
+  return candidates.every((candidate) => sameHookCommandPaths(candidate, first))
+    ? first
+    : undefined;
 }
 
 function parseHayaHookCommandPaths(command) {
@@ -284,12 +203,46 @@ function sameHookCommandPaths(a, b) {
   return a.nodePath === b.nodePath && a.cliPath === b.cliPath;
 }
 
-function writeHooksJsonIfChanged(hooksPath, next) {
-  const nextText = `${JSON.stringify(next, null, 2)}\n`;
-  if (readOptionalText(hooksPath) === nextText) {
+function readCommandState(path) {
+  const text = readOptionalText(path);
+  if (text === undefined) {
+    return undefined;
+  }
+
+  try {
+    const value = JSON.parse(text);
+    if (
+      value?.version === COMMAND_STATE_VERSION
+      && typeof value.nodePath === "string"
+      && typeof value.cliPath === "string"
+    ) {
+      return { nodePath: value.nodePath, cliPath: value.cliPath };
+    }
+  } catch {
+    // Invalid HAYA-owned metadata is replaceable and must not block a session.
+  }
+  return undefined;
+}
+
+function writeCommandStateIfChanged(path, commandPaths) {
+  const next = {
+    version: COMMAND_STATE_VERSION,
+    nodePath: commandPaths.nodePath,
+    cliPath: commandPaths.cliPath
+  };
+  const nextText = JSON.stringify(next, null, 2) + "\n";
+  if (readOptionalText(path) === nextText) {
     return;
   }
-  writeFileSync(hooksPath, nextText, "utf8");
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, nextText, "utf8");
+}
+
+function writeMigratedHooksIfChanged(hooksPath, existing, next) {
+  if (JSON.stringify(existing) === JSON.stringify(next)) {
+    return;
+  }
+  writeFileSync(hooksPath, JSON.stringify(next, null, 2) + "\n", "utf8");
 }
 
 function readHooksJson(hooksPath) {
@@ -300,7 +253,9 @@ function readHooksJson(hooksPath) {
     if (error?.code === "ENOENT") {
       return {};
     }
-    throw new Error(`haya-pet: could not update Codex ${HOOKS_FILE} (${error.message})`, { cause: error });
+    throw new Error("haya-pet: could not update Codex " + HOOKS_FILE + " (" + error.message + ")", {
+      cause: error
+    });
   }
 }
 
@@ -318,28 +273,16 @@ function markManagedHooks(settings) {
   return { hooks };
 }
 
-function mergeHooksJson(existing, managed) {
-  const output = isPlainObject(existing) ? { ...existing } : {};
-  const existingHooks = isPlainObject(output.hooks) ? output.hooks : {};
-  const managedHooks = managed.hooks ?? {};
-  const hooks = {};
-  const events = new Set([...Object.keys(existingHooks), ...Object.keys(managedHooks)]);
-
-  for (const event of events) {
-    const preserved = removeManagedEntries(existingHooks[event]);
-    const nextEntries = managedHooks[event] ?? [];
-
-    if (Array.isArray(preserved)) {
-      hooks[event] = [...preserved, ...nextEntries];
-    } else if (nextEntries.length > 0) {
-      hooks[event] = nextEntries;
-    } else if (preserved !== undefined) {
-      hooks[event] = preserved;
-    }
+function removeManagedHooksJson(existing) {
+  if (!isPlainObject(existing?.hooks)) {
+    return existing;
   }
 
-  output.hooks = hooks;
-  return output;
+  const hooks = {};
+  for (const [event, entries] of Object.entries(existing.hooks)) {
+    hooks[event] = removeManagedEntries(entries);
+  }
+  return { ...existing, hooks };
 }
 
 function removeManagedEntries(entries) {
@@ -381,7 +324,7 @@ function isLegacyHayaPetCommand(command) {
   if (typeof command !== "string") {
     return false;
   }
-  return /haya-pet(?:-hook)?\.js(?:\\?")?\s+(state|codex-permission-request)\b/.test(command);
+  return /haya-pet(?:-hook)?\.js(?:\\?")?\s+(state|codex-permission-request)\b/i.test(command);
 }
 
 function isPlainObject(value) {
