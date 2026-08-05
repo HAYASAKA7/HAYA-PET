@@ -1072,7 +1072,7 @@ async function noopSend() {}
 async function noopClose() {}
 
 if (isDirectRun(import.meta.url, process.argv[1])) {
-  bootstrap()
+  runHookInvocation(process.argv.slice(2))
     .catch((error) => {
       console.error(error.message);
       process.exitCode = 1;
@@ -1094,28 +1094,28 @@ if (isDirectRun(import.meta.url, process.argv[1])) {
 // are handed to the reporter via dependencies. Done here (not inside
 // main/runStateCommand) so unit tests, and every other command that needs stdin
 // passed through to its child (e.g. `run`), never touch stdin.
-async function bootstrap() {
-  const argv = process.argv.slice(2);
-  const dependencies = {};
+export async function runHookInvocation(argv, dependencies = {}) {
+  const nextDependencies = { ...dependencies };
   if (argv[0] === "state") {
     try {
-      const { transcriptPath, backgroundTasks, agentId } = await readHookPayloadFromStdin();
+      const readPayload = dependencies.readHookPayloadFromStdin ?? readHookPayloadFromStdin;
+      const { transcriptPath, backgroundTasks, agentId } = await readPayload();
       if (transcriptPath) {
-        dependencies.transcriptPath = transcriptPath;
+        nextDependencies.transcriptPath = transcriptPath;
       }
       if (Array.isArray(backgroundTasks) && backgroundTasks.length > 0) {
-        dependencies.backgroundTasks = backgroundTasks;
+        nextDependencies.backgroundTasks = backgroundTasks;
       }
       // Present only for subagent-originated events — the reporter drops those so a
       // subagent's tool use never overwrites the main session's status.
       if (agentId) {
-        dependencies.agentId = agentId;
+        nextDependencies.agentId = agentId;
       }
     } catch {
       // a missing/garbled payload just means no binding this time — never fatal
     }
   }
-  return main(argv, dependencies);
+  return main(argv, nextDependencies);
 }
 
 function isDirectRun(moduleUrl, scriptPath) {
