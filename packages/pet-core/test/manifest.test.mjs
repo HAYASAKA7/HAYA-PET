@@ -78,12 +78,14 @@ test("normalizes per-action frame duration overrides", () => {
     name: "P",
     spritesheet: "s.webp",
     frameDurationMs: 100,
-    actionFrameDurations: { idle: 250 }
+    actionFrameDurations: { idle: 250 },
+    actionLoopPausesMs: { review: 1000 }
   });
 
   assert.equal(result.ok, true);
   assert.equal(getFrameDurationMs(result.manifest, "idle"), 250);
   assert.equal(getFrameDurationMs(result.manifest, "running"), 100);
+  assert.deepEqual(result.manifest.actionLoopPausesMs, { review: 1000 });
 });
 
 test("rejects non-object manifests", () => {

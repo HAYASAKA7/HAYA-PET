@@ -31,6 +31,7 @@ export function parsePetManifest(input) {
 
   const frameDurationMs = resolveDefaultDuration(errors, input.frameDurationMs);
   const actionFrameDurations = resolveActionDurations(errors, input.actionFrameDurations);
+  const actionLoopPausesMs = resolveActionDurations(errors, input.actionLoopPausesMs, "actionLoopPausesMs");
 
   if (errors.length > 0) {
     return { ok: false, errors };
@@ -46,7 +47,8 @@ export function parsePetManifest(input) {
       cellWidth,
       cellHeight,
       frameDurationMs,
-      actionFrameDurations
+      actionFrameDurations,
+      actionLoopPausesMs
     }
   };
 }
@@ -73,25 +75,25 @@ function resolveDefaultDuration(errors, value) {
   return value;
 }
 
-function resolveActionDurations(errors, value) {
+function resolveActionDurations(errors, value, fieldName = "actionFrameDurations") {
   if (value === undefined) {
     return {};
   }
 
   if (!isPlainObject(value)) {
-    errors.push("actionFrameDurations must be an object");
+    errors.push(`${fieldName} must be an object`);
     return {};
   }
 
   const resolved = {};
   for (const [action, duration] of Object.entries(value)) {
     if (!Object.prototype.hasOwnProperty.call(ACTION_ROWS, action)) {
-      errors.push(`actionFrameDurations contains unknown action: ${action}`);
+      errors.push(`${fieldName} contains unknown action: ${action}`);
       continue;
     }
 
     if (!Number.isFinite(duration) || duration <= 0) {
-      errors.push(`actionFrameDurations.${action} must be a positive number`);
+      errors.push(`${fieldName}.${action} must be a positive number`);
       continue;
     }
 
