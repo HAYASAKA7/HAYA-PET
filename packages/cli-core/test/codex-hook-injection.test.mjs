@@ -162,7 +162,7 @@ test("injectCodexHooks removes legacy profile hooks without copying global trust
   try {
     const hooksPath = join(home, "hooks.json");
     writeFileSync(join(home, "config.toml"), "[hooks.state.'" + hooksPath + ":stop:0:0']\ntrusted_hash = \"sha256:global\"\n", "utf8");
-    writeFileSync(join(home, "sakana.config.toml"), "approvals_reviewer = \"auto_review\"\n\n# haya-pet live-status hooks profile. Managed by haya-pet; safe to delete.\n[[hooks.Stop]]\n[[hooks.Stop.hooks]]\ntype = \"command\"\ncommand = 'old-node \"C:\\app\\haya-pet.js\" state idle'\n\n[[hooks.Stop]]\n[[hooks.Stop.hooks]]\ntype = \"command\"\ncommand = \"echo user\"\n", "utf8");
+    writeFileSync(join(home, "sakana.config.toml"), "approvals_reviewer = \"auto_review\"\n\n# haya-pet live-status hooks profile. Managed by haya-pet; safe to delete.\n[[hooks.Stop]]\nmatcher = \"manual\"\n[[hooks.Stop.hooks]]\ntype = \"command\"\ncommand = 'old-node \"C:\\app\\haya-pet.js\" state idle'\n\n[[hooks.Stop.hooks]]\ntype = \"command\"\ncommand = \"echo user\"\n", "utf8");
 
     injectCodexHooks({
       nodePath: "n",
@@ -174,6 +174,7 @@ test("injectCodexHooks removes legacy profile hooks without copying global trust
 
     const profile = readFileSync(join(home, "sakana.config.toml"), "utf8");
     assert.ok(profile.includes('approvals_reviewer = "auto_review"'));
+    assert.ok(profile.includes('matcher = "manual"'));
     assert.ok(profile.includes('command = "echo user"'));
     assert.ok(!profile.includes("haya-pet.js"));
     assert.ok(!profile.includes("sha256:global"));

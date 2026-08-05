@@ -105,12 +105,34 @@ function removeLegacyHayaTomlHooks(toml) {
     }
     index -= 1;
 
-    if (!block.some((line) => isLegacyHayaPetCommand(line))) {
-      output.push(...block);
-    }
+    output.push(...removeLegacyHayaHookCommands(block));
   }
 
   return output.join("\n");
+}
+
+function removeLegacyHayaHookCommands(block) {
+  const firstCommandIndex = block.findIndex((line) => isCodexHookCommandHeader(line));
+  if (firstCommandIndex === -1) {
+    return block;
+  }
+
+  const prefix = block.slice(0, firstCommandIndex);
+  const preservedCommands = [];
+  let index = firstCommandIndex;
+  while (index < block.length) {
+    const commandBlock = [block[index]];
+    index += 1;
+    while (index < block.length && !isCodexHookCommandHeader(block[index])) {
+      commandBlock.push(block[index]);
+      index += 1;
+    }
+    if (!commandBlock.some((line) => isLegacyHayaPetCommand(line))) {
+      preservedCommands.push(...commandBlock);
+    }
+  }
+
+  return preservedCommands.length > 0 ? [...prefix, ...preservedCommands] : [];
 }
 
 function isHayaManagedProfileComment(line) {
