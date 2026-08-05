@@ -2,6 +2,25 @@
 
 Issues found in live use, with their current status.
 
+## ✅ Resolved: offline companions still caused full hook startup
+
+- **Symptom:** With live-status hooks enabled, provider hook commands could still
+  start the full HAYA CLI and attempt IPC when no HAYA-wrapped session existed or
+  the companion had become unavailable. Codex was most visible because its hooks
+  must remain in the user-level `$CODEX_HOME/hooks.json` to preserve one-time
+  trust.
+- **Root cause:** Hook definitions called `haya-pet.js` directly. The reporter
+  could no-op after discovering a missing session or IPC failure, but only after
+  Node had loaded the entire CLI dependency graph. The wrapper also resolved and
+  installed provider hooks before knowing whether companion startup succeeded.
+- **Fix:** The wrapper now gates hook injection and provider watchers on a live
+  companion connection. Claude receives no HAYA settings when startup is offline.
+  Stable Claude and Codex commands now target `haya-pet-hook.js`, which checks for
+  `HAYA_PET_SESSION_ID`, applies a short IPC deadline, and imports the full
+  reporter only after connecting. Codex legacy managed commands migrate once to
+  the dispatcher and then stay stable for trust caching. Antigravity and generic
+  clients have no lifecycle hook integration.
+
 ## ✅ Resolved: local Electron runtime could share cache/crash state with other dev Electron apps
 
 - **Symptom:** While running HAYA Pet from a source checkout or npm link, the pet

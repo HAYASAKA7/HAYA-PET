@@ -8,6 +8,7 @@ deferred problems with known root causes.
 | `haya-pet: command not found` | Install globally (`npm i -g …`), or in a source checkout run `npm link` in the repo root, or call the file directly: `node <repo>/apps/cli/src/haya-pet.js`. |
 | Running a CLI starts the pet but not the command | Fixed — update to the latest version. (Was caused by the auto-start poll exiting early.) |
 | Pet doesn't react to a session | Launch the CLI via `haya-pet run …`. If the overlay didn't auto-start, run `haya-pet start`, or check `HAYA_PET_NO_AUTOSTART` isn't set. |
+| AI client launches while the HAYA companion is unavailable | Expected graceful fallback: the provider command still starts. Claude gets no HAYA settings or watchers for that launch. Codex retains stable user-level definitions for trust, but its lightweight dispatcher exits before loading the reporter when no HAYA session or companion is available. Antigravity and generic clients install no hooks. Start the companion, then restart the wrapped session for live status. |
 | Pet shows complete/working while an approval prompt is waiting | Fixed — update to the latest version. See "Approval prompt hidden by idle/working" below. |
 | Pet shows a blue placeholder box | No spritesheet found — add a pet (see the README); behaviour is otherwise correct. |
 | Pet is off-screen / can't find it | Tray icon → **Reset Position**. |

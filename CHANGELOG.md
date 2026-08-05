@@ -7,6 +7,18 @@ All notable changes to HAYA Pet are documented here. This project adheres to
 > 0.2.0 npm publish; they are listed under 0.2.1, which is the first version that
 > ships them.
 
+## [Unreleased]
+
+### Changed
+- **Provider hooks now stop immediately when the HAYA companion is unavailable.**
+  Claude hook settings and provider watchers are skipped when an offline wrapper
+  starts. Codex keeps its stable user-level hook definitions for trust caching,
+  but they now invoke a lightweight dispatcher that exits before loading the full
+  reporter when there is no HAYA session or the companion cannot be reached.
+  Existing managed Codex reporter commands migrate to the dispatcher once, then
+  remain byte-stable. Antigravity and generic clients remain lifecycle-only and
+  do not install hooks.
+
 ## [0.3.25]
 
 ### Fixed

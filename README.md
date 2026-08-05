@@ -187,6 +187,13 @@ Why opt in? Both clients show a one-time trust prompt when hooks are added. HAYA
 Pet lets you decide when to approve that instead of surprising you in the middle
 of work.
 
+Offline behavior is provider-aware. If the companion cannot be reached when a
+wrapper starts, Claude Code receives no HAYA settings and no provider transcript
+watcher starts. Codex keeps its stable user-level hook definitions so one-time
+trust remains valid, but each hook first runs a lightweight dispatcher: without a
+HAYA session, or while the companion is offline, it exits before loading the full
+reporter. Antigravity and generic clients do not install lifecycle hooks.
+
 Codex live status combines three sources: hooks report `thinking`/`idle`, a
 Codex-specific permission reporter maps approval requests from the session's
 resolved `approvals_reviewer` setting, and transcript watchers report tool/file

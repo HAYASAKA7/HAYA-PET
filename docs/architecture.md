@@ -61,13 +61,26 @@ in-session activity through the shared, client-agnostic `haya-pet state` command
 `--observe`. Hooks are opt-in because injecting them triggers the client's one-time
 *review hooks* trust prompt.
 
+Hook work is gated by companion availability. If the wrapper cannot connect at
+startup, it still launches the requested provider command but skips hook
+injection, transcript watchers, and `HAYA_PET_SESSION_ID`; for Claude Code that
+means no HAYA `--settings` argument. Hook commands themselves target the
+built-in-only `haya-pet-hook.js` dispatcher. It rejects invocations with no HAYA
+session before importing IPC modules, applies a 150 ms IPC connection deadline,
+and loads the full `haya-pet.js` reporter only after a companion connection is
+established. This also covers a companion that stops during a live session.
+Antigravity and generic adapters have no lifecycle hooks, so their offline path
+is already limited to wrapper lifecycle behavior.
+
 The injection mechanism differs per client. **Claude Code** takes a stable
 `claude --settings <file>`. **Codex** has no per-invocation settings flag, so the
 wrapper merges stable user-level hooks into `$CODEX_HOME/hooks.json`. Before
 regenerating HAYA-managed entries, the Codex injector reuses the already-installed
-HAYA command path while its Node binary and CLI file still exist, and it skips the
-write when the merged JSON is unchanged; this keeps Codex's hook-trust hash stable
-across Node manager, Node version, and launcher-path churn. Codex loads that hook
+HAYA dispatcher path while its Node binary and CLI file still exist, and it skips
+writing when the merged JSON is unchanged. Legacy managed commands that target
+`haya-pet.js` migrate once to `haya-pet-hook.js`; after that, the hook-trust
+hash stays stable across Node manager, Node version, and launcher-path churn. Codex
+loads that hook
 source alongside any selected `-p`/`--profile`, so custom profiles remain available
 while HAYA Pet still sets the per-session environment and watchers. Codex stores
 reviewed hook hashes in the active config layer; when a named profile is selected,
