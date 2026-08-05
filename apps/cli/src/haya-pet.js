@@ -446,9 +446,9 @@ async function runRunCommand(parsed, dependencies) {
     };
   }
 
-  // Codex: no `--settings` equivalent, so install stable user-level hooks in
-  // CODEX_HOME/hooks.json. Codex loads user hooks alongside any selected
-  // -p/--profile, so the wrapper never consumes the user's single profile slot.
+  // Codex hooks are passed as session config overrides. They are prepended so a
+  // selected profile remains available and explicit user config stays authoritative.
+  // The injector also removes HAYA entries left by the legacy global installer.
   // PreToolUse is not reliable, so a transcript watcher supplies tool activity.
   const codexHooksOn = hooksOn && parsed.clientId === "codex";
   if (codexHooksOn) {
@@ -456,8 +456,10 @@ async function runRunCommand(parsed, dependencies) {
     const injected = injectCodexHooks({
       env,
       codexHome: dependencies.codexHome,
+      commandStatePath: resolveCodexHookCommandStatePath(dependencies, env),
       profileName: codexProfileName
     });
+    childArgs = [...(injected.configArgs ?? []), ...parsed.childArgs];
     childEnv = {
       ...env,
       HAYA_PET_SESSION_ID: sessionId,
@@ -735,6 +737,23 @@ function resolveSessionDir(dependencies, env) {
       env,
       homeDir: dependencies.homeDir
     }).sessionDir;
+  } catch {
+    return undefined;
+  }
+}
+
+function resolveCodexHookCommandStatePath(dependencies, env) {
+  if (dependencies.codexHookCommandStatePath) {
+    return dependencies.codexHookCommandStatePath;
+  }
+
+  try {
+    const statePath = getDefaultPaths({
+      platform: dependencies.platform,
+      env,
+      homeDir: dependencies.homeDir
+    }).statePath;
+    return join(dirname(statePath), "codex-hook-command.json");
   } catch {
     return undefined;
   }

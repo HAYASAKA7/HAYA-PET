@@ -504,6 +504,7 @@ test("offline companion skips Codex hook installation and watchers", async () =>
   assert.equal(transcriptWatches, 0);
   assert.equal(guardianWatches, 0);
   assert.equal(calls[0].env.HAYA_PET_SESSION_ID, undefined);
+  assert.deepEqual(calls[0].args, [], "offline runs receive no HAYA session overrides");
 });
 
 test("claude-code does NOT inject hooks by default (safe out-of-box)", async () => {
@@ -592,13 +593,21 @@ test("hooks command parses and persists the toggle", async () => {
 test("persisted `hooks on` installs Codex hooks without consuming the profile slot", async () => {
   const calls = [];
   let injected = 0;
+  let injectOptions;
   await runAiPet(["run", "--client", "codex", "--", "codex"], {
     cwd: process.cwd(),
     env: { USERPROFILE: "C:\\Users\\A" }, // no HAYA_PET_HOOKS
     heartbeatIntervalMs: 10,
     send: async () => {},
     createStateFile: hooksStateFile(true),
-    injectCodexHooks: () => { injected += 1; return { hooksPath: "C:\\Users\\A\\.codex\\hooks.json", cleanup: () => {} }; },
+    injectCodexHooks: (options) => {
+      injected += 1;
+      injectOptions = options;
+      return {
+        configArgs: ["-c", "hooks.Stop=[{ hooks = [] }]"],
+        cleanup: () => {}
+      };
+    },
     runGenericCommand: async (options) => {
       calls.push(options);
       return { sessionId: options.sessionId, pid: 1, exitCode: 0 };
@@ -606,7 +615,8 @@ test("persisted `hooks on` installs Codex hooks without consuming the profile sl
   });
 
   assert.equal(injected, 1, "config preference enables Codex hooks");
-  assert.deepEqual(calls[0].args, [], "Codex args stay untouched");
+  assert.deepEqual(calls[0].args, ["-c", "hooks.Stop=[{ hooks = [] }]"]);
+  assert.match(injectOptions.commandStatePath, /codex-hook-command\.json$/);
   assert.equal(calls[0].env.HAYA_PET_SESSION_ID, calls[0].sessionId);
   assert.equal(calls[0].env.HAYA_PET_CODEX_APPROVAL_REVIEWER, "user");
 });
@@ -734,20 +744,31 @@ test("codex hooks also start a guardian-review watcher that reports review state
   ]);
 });
 
-test("codex hooks preserve user profile args and still wire live status", async () => {
+test("codex hooks preserve Sakana profile and keep later user config authoritative", async () => {
   const calls = [];
   let injected = 0;
   let injectOptions;
   let watched = 0;
   const lines = [];
-  await runAiPet(["run", "--client", "codex", "--", "codex", "-p", "mine"], {
+  await runAiPet([
+    "run", "--client", "codex", "--", "codex",
+    "--profile", "sakana",
+    "-c", "hooks.Stop=[]"
+  ], {
     cwd: process.cwd(),
     env: { USERPROFILE: "C:\\Users\\A" },
     heartbeatIntervalMs: 10,
     send: async () => {},
     createStateFile: hooksStateFile(true),
     print: (line) => lines.push(line),
-    injectCodexHooks: (options) => { injected += 1; injectOptions = options; return { hooksPath: "C:\\Users\\A\\.codex\\hooks.json", cleanup: () => {} }; },
+    injectCodexHooks: (options) => {
+      injected += 1;
+      injectOptions = options;
+      return {
+        configArgs: ["-c", "hooks.Stop=[{ hooks = [] }]"],
+        cleanup: () => {}
+      };
+    },
     watchCodexTranscript: () => { watched += 1; return { stop: () => {} }; },
     runGenericCommand: async (options) => {
       calls.push(options);
@@ -755,10 +776,15 @@ test("codex hooks preserve user profile args and still wire live status", async 
     }
   });
 
-  assert.equal(injected, 1, "hooks are installed even when Codex gets a user profile");
-  assert.equal(injectOptions.profileName, "mine", "hook injector gets the short selected Codex profile");
+  assert.equal(injected, 1, "hooks are injected even when Codex gets a user profile");
+  assert.equal(injectOptions.profileName, "sakana", "hook injector gets the selected Codex profile");
   assert.equal(watched, 1, "transcript watcher still starts for profiled runs");
-  assert.deepEqual(calls[0].args, ["-p", "mine"], "user args untouched");
+  assert.deepEqual(calls[0].args, [
+    "-c", "hooks.Stop=[{ hooks = [] }]",
+    "--profile", "sakana",
+    "-c", "hooks.Stop=[]"
+  ]);
+  assert.ok(!calls[0].args.includes("features.hooks=true"));
   assert.equal(calls[0].env.HAYA_PET_SESSION_ID, calls[0].sessionId);
   assert.ok(!lines.some((l) => /skipped/i.test(l)), "profile runs no longer skip hooks");
 });
