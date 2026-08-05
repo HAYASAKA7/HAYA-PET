@@ -49,12 +49,11 @@
 //  - UNTESTED: PreCompact / SubagentStart|Stop live firing (no compaction /
 //    subagent occurred in the probe).
 //
-// Injection: unlike `claude --settings <file>`, Codex has no per-invocation
-// settings-file flag. The wrapper writes stable user-level hooks to
-// $CODEX_HOME/hooks.json, merging HAYA-managed entries with any existing user
-// hooks. This avoids consuming Codex's single -p/--profile slot; the reporter
-// still no-ops without HAYA_PET_SESSION_ID.
-// This still trips Codex's one-time hook-trust prompt, exactly like the Claude path.
+// Injection: the wrapper passes each event through a session-scoped
+// `-c hooks.<Event>=<TOML>` override. This keeps native Codex launches free of
+// HAYA hooks, does not consume the single -p/--profile slot, and lets later user
+// config overrides remain authoritative. Stable HAYA-owned command metadata keeps
+// the generated values unchanged for Codex's hook-trust cache.
 
 // Codex's file-editing tool(s) vs. its command tool.
 const EDIT_TOOLS = ["apply_patch"];

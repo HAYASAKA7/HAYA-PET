@@ -189,10 +189,10 @@ of work.
 
 Offline behavior is provider-aware. If the companion cannot be reached when a
 wrapper starts, Claude Code receives no HAYA settings and no provider transcript
-watcher starts. Codex keeps its stable user-level hook definitions so one-time
-trust remains valid, but each hook first runs a lightweight dispatcher: without a
-HAYA session, or while the companion is offline, it exits before loading the full
-reporter. Antigravity and generic clients do not install lifecycle hooks.
+watcher starts. Codex receives no HAYA session config and no provider transcript
+watcher starts. Native Codex launches never load or display HAYA hooks, including
+while another HAYA-wrapped Codex session is active. Antigravity and generic
+clients do not install lifecycle hooks.
 
 Codex live status combines three sources: hooks report `thinking`/`idle`, a
 Codex-specific permission reporter maps approval requests from the session's
@@ -201,10 +201,17 @@ activity plus guardian-review outcomes. With **"Approve for me"** the pet shows
 *reviewing* immediately; *waiting for approval* is reserved for Codex's manual
 "Ask for approval" mode.
 
-Codex custom profiles are preserved. HAYA Pet installs its live-status hooks in
-`$CODEX_HOME/hooks.json` instead of passing its own `-p` profile, so launches such
-as `haya-pet run --client codex -- codex --profile fugu` keep both the selected
-Codex profile and HAYA live status.
+Codex custom profiles are preserved. HAYA Pet prepends session-only
+`-c hooks.<Event>=...` values instead of passing its own `-p` profile, so launches
+such as `haya-pet run --client codex -- codex --profile fugu` keep both the
+selected Codex profile and HAYA live status. Explicit user `-c` values come later
+and remain authoritative.
+
+On the first wrapped Codex launch after upgrading, HAYA Pet removes only its
+legacy handlers from `$CODEX_HOME/hooks.json` and from the selected profile,
+preserving unrelated hooks and settings. Codex may ask for one final hook review
+because the source changes to stable session flags; subsequent unchanged wrapped
+launches reuse that trust identity.
 
 Per-tool `PreToolUse` hooks still depend on an upstream Codex gap
 ([openai/codex#16732](https://github.com/openai/codex/issues/16732)); the

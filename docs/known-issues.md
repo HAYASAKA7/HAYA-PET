@@ -2,24 +2,44 @@
 
 Issues found in live use, with their current status.
 
+## ✅ Resolved: native Codex loaded HAYA hooks outside wrapped sessions
+
+- **Symptom:** After enabling HAYA live status, a normal native Codex launch could
+  still show `HAYA Pet live status` and schedule HAYA hook commands even when the
+  companion was offline. The same happened while a separate HAYA-wrapped Codex
+  session was active.
+- **Root cause:** The offline dispatcher stopped reporter work after a hook
+  process started, but HAYA definitions still lived in the global
+  `$CODEX_HOME/hooks.json` source. Codex discovers and displays a hook's
+  `statusMessage` before the child command can decide to exit, so a runtime no-op
+  could not provide configuration isolation.
+- **Fix:** Wrapped Codex launches now receive HAYA hooks through stable
+  session-layer `-c hooks.<Event>=<TOML>` arguments. Native Codex never receives
+  those values. The wrapper does not consume `-p`/`--profile`, and its generated
+  flags precede user arguments so later explicit `-c` values stay authoritative.
+  The next online wrapped launch removes only legacy HAYA handlers from global
+  `hooks.json` and the selected profile while preserving unrelated hooks and
+  config. Stable HAYA-owned command metadata prevents Node path churn from
+  changing the hook definition. Codex may request one final trust review when
+  migrating to the session source.
+
 ## ✅ Resolved: offline companions still caused full hook startup
 
 - **Symptom:** With live-status hooks enabled, provider hook commands could still
   start the full HAYA CLI and attempt IPC when no HAYA-wrapped session existed or
-  the companion had become unavailable. Codex was most visible because its hooks
-  must remain in the user-level `$CODEX_HOME/hooks.json` to preserve one-time
-  trust.
+  the companion had become unavailable. Codex was most visible while HAYA still
+  used a user-level `$CODEX_HOME/hooks.json` source.
 - **Root cause:** Hook definitions called `haya-pet.js` directly. The reporter
   could no-op after discovering a missing session or IPC failure, but only after
   Node had loaded the entire CLI dependency graph. The wrapper also resolved and
   installed provider hooks before knowing whether companion startup succeeded.
 - **Fix:** The wrapper now gates hook injection and provider watchers on a live
   companion connection. Claude receives no HAYA settings when startup is offline.
-  Stable Claude and Codex commands now target `haya-pet-hook.js`, which checks for
+  Stable Claude and Codex commands target `haya-pet-hook.js`, which checks for
   `HAYA_PET_SESSION_ID`, applies a short IPC deadline, and imports the full
-  reporter only after connecting. Codex legacy managed commands migrate once to
-  the dispatcher and then stay stable for trust caching. Antigravity and generic
-  clients have no lifecycle hook integration.
+  reporter only after connecting. Codex now also omits all HAYA session hook
+  config when the companion is offline. Antigravity and generic clients have no
+  lifecycle hook integration.
 
 ## ✅ Resolved: local Electron runtime could share cache/crash state with other dev Electron apps
 
@@ -104,29 +124,16 @@ Issues found in live use, with their current status.
   ask to review them again on later launches. It was intermittent rather than
   every run. It could happen even with the default config when HAYA Pet was
   launched through a different Node manager path, Node version, npm link, or
-  install path, and it was also visible with named `-p`/`--profile` configs whose
-  hook-trust state was missing or stale.
-- **Root cause:** HAYA Pet correctly moved Codex hooks into user-level
-  `$CODEX_HOME/hooks.json`, but the injector rebuilt the managed hook commands
-  from the current launch environment on every run. If the resolved Node binary
-  or CLI path changed, Codex saw a different hook definition and asked for trust
-  again. Separately, Codex records reviewed `trusted_hash` blocks in the active
-  config layer. A default launch writes them under base `config.toml`; a profiled
-  launch can read/write `<profile>.config.toml` instead, so the same shared
-  `hooks.json` source could be trusted in one config layer but not the other.
-  Older HAYA Pet builds also wrote managed `[[hooks.*]]` tables directly into
-  profile TOML; those stale profile hooks remained loaded beside the newer shared
-  `hooks.json` source.
-- **Fix:** `injectCodexHooks` now reads the existing `hooks.json` before
-  rebuilding it. When the already-installed HAYA hook command points to existing
-  Node and CLI files, the injector keeps that command path instead of replacing
-  it with the current launcher's path, and it skips the file write entirely when
-  the merged JSON is unchanged. The wrapper also parses the selected Codex
-  profile and passes it to the injector, which copies the existing trusted
-  `hooks.json` `[hooks.state]` blocks from base `config.toml` into the selected
-  profile config, replacing stale blocks for that hook source and removing legacy
-  HAYA-managed TOML hook tables. Unrelated profile settings, user hooks, and
-  unrelated trust state are preserved.
+  install path, and named `-p`/`--profile` configs made the behavior less
+  predictable.
+- **Root cause:** The former global `hooks.json` design tied trust to both mutable
+  command paths and config-layer-specific trust blocks. Mirroring those blocks
+  into profile files reduced prompts but also coupled HAYA to user profile state.
+- **Fix:** HAYA now keeps the resolved Node and dispatcher paths in its own stable
+  metadata and passes hooks through Codex's stable session-flags layer. It no
+  longer copies trust blocks between Codex configs or installs global hooks.
+  Legacy HAYA entries are removed without touching unrelated profile settings,
+  user hooks, or trust state. One final review can be required during migration.
 
 ## ✅ Resolved: cross-session status contamination on Codex
 
@@ -403,10 +410,11 @@ Issues found in live use, with their current status.
 - **Root cause:** Older builds wrote a stable `$CODEX_HOME/haya-pet.config.toml`
   profile, but Codex stored hook trust decisions back into that same profile
   under `[hooks.state]`. Rewriting the profile on launch deleted that trust cache.
-- **Fix:** The Codex hook injector now writes stable commands into
-  `$CODEX_HOME/hooks.json` and preserves existing user hooks while refreshing
-  HAYA-managed entries. Users may need to approve once after updating; after
-  that, unchanged hook commands should stay trusted.
+- **Fix:** The Codex hook injector now writes stable commands into a session-only
+  Codex config layer and persists command paths in HAYA-owned metadata. It
+  removes the older managed profile/global definitions without replacing them.
+  Users may need to approve once after updating; after that, unchanged wrapped
+  sessions should stay trusted and native Codex loads no HAYA hook source.
 
 ## ✅ Resolved: Codex pet looked busy immediately after startup
 
@@ -619,11 +627,13 @@ observation (`--observe`) or L1 lifecycle as the fallback. Current state:
   approving once (a volatile per-session argument would re-trigger it every
   launch — see the resolved note below). `--observe` is a separate PTY opt-in for
   non-interactive runs (terminal-fidelity tradeoff).
-- **Codex** — **implemented (partial).** Opt-in via the global `haya-pet hooks on`;
-  the wrapper injects `packages/adapters/src/codex-hooks.js` as stable user-level
-  hooks in `$CODEX_HOME/hooks.json` (`packages/cli-core/src/codex-hook-injection.js`).
-  Custom Codex `-p/--profile` args remain untouched. Falls back to `--observe` / L1
-  when not enabled. Findings (verified against `codex-cli` 0.137.0 on Windows):
+- **Codex** — **implemented (partial).** Opt-in via the persisted
+  `haya-pet hooks on` setting; the wrapper serializes
+  `packages/adapters/src/codex-hooks.js` into session-only `-c` config arguments
+  (`packages/cli-core/src/codex-hook-injection.js`). Custom Codex
+  `-p`/`--profile` args remain untouched, and later user `-c` values remain
+  authoritative. Falls back to `--observe` / L1 when not enabled. Findings
+  (verified against `codex-cli` 0.137.0 on Windows):
   - **Mechanism fits.** Codex has a lifecycle-hooks system (`[[hooks.<Event>]]` in
     `config.toml` or a `hooks.json`), with the `hooks` feature flag `stable` and ON
     by default. Command hooks receive a JSON payload on **stdin**
@@ -636,10 +646,12 @@ observation (`--observe`) or L1 lifecycle as the fallback. Current state:
     signal (`SubagentStop` is mid-turn → stays *thinking*). `PermissionRequest`
     exists, so the approval cue is reachable.
   - **Injection differs** — Codex has no `claude --settings <file>` equivalent.
-    HAYA Pet uses `$CODEX_HOME/hooks.json`, merging HAYA-managed entries with any
-    existing user hooks. Codex loads that hook source alongside selected profiles,
-    and has its own *review hooks* trust prompt (bypass:
-    `--dangerously-bypass-hook-trust`), so the same one-time trust UX as Claude applies.
+    HAYA Pet uses session `-c hooks.<Event>=...` values and keeps stable command
+    paths in HAYA-owned metadata. Legacy global/profile HAYA entries are removed
+    on migration; unrelated user hooks and config are preserved. Codex has its
+    own *review hooks* trust prompt (bypass:
+    `--dangerously-bypass-hook-trust`), so one final review can occur when moving
+    from the old global source.
   - **Windows command quoting (fixed in the adapter):** Codex runs a hook `command`
     via `cmd /c "<cmd>"`, which strips a **leading** quote — so Claude's
     `"<node>" "<cli>" …` form dies with *"hook exited with code 1"*. The Codex

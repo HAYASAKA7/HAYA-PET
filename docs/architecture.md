@@ -54,8 +54,8 @@ as each client allows:
 
 The **default** is native passthrough (`stdio: "inherit"`) for full terminal
 fidelity, with **L1 lifecycle** status for every client. Richer status is opt-in:
-**Claude Code** and **Codex** gain **L4 hooks** when enabled with the global
-`haya-pet hooks on` (persisted; or per-run via `HAYA_PET_HOOKS=1`). Both report
+**Claude Code** and **Codex** gain **L4 hooks** when enabled with the persisted
+`haya-pet hooks on` setting (or per-run via `HAYA_PET_HOOKS=1`). Both report
 in-session activity through the shared, client-agnostic `haya-pet state` command
 (lifecycle still comes from the wrapper's exit code); any client gains **L2** with
 `--observe`. Hooks are opt-in because injecting them triggers the client's one-time
@@ -64,28 +64,29 @@ in-session activity through the shared, client-agnostic `haya-pet state` command
 Hook work is gated by companion availability. If the wrapper cannot connect at
 startup, it still launches the requested provider command but skips hook
 injection, transcript watchers, and `HAYA_PET_SESSION_ID`; for Claude Code that
-means no HAYA `--settings` argument. Hook commands themselves target the
-built-in-only `haya-pet-hook.js` dispatcher. It rejects invocations with no HAYA
-session before importing IPC modules, applies a 150 ms IPC connection deadline,
-and loads the full `haya-pet.js` reporter only after a companion connection is
-established. This also covers a companion that stops during a live session.
+means no HAYA `--settings` argument, and for Codex it means no HAYA `-c` hook
+overrides. Hook commands themselves target the built-in-only
+`haya-pet-hook.js` dispatcher. It rejects invocations with no HAYA session before
+importing IPC modules, applies a 150 ms IPC connection deadline, and loads the
+full `haya-pet.js` reporter only after a companion connection is established.
+This also covers a companion that stops during a live session.
 Antigravity and generic adapters have no lifecycle hooks, so their offline path
 is already limited to wrapper lifecycle behavior.
 
 The injection mechanism differs per client. **Claude Code** takes a stable
-`claude --settings <file>`. **Codex** has no per-invocation settings flag, so the
-wrapper merges stable user-level hooks into `$CODEX_HOME/hooks.json`. Before
-regenerating HAYA-managed entries, the Codex injector reuses the already-installed
-HAYA dispatcher path while its Node binary and CLI file still exist, and it skips
-writing when the merged JSON is unchanged. Legacy managed commands that target
-`haya-pet.js` migrate once to `haya-pet-hook.js`; after that, the hook-trust
-hash stays stable across Node manager, Node version, and launcher-path churn. Codex
-loads that hook
-source alongside any selected `-p`/`--profile`, so custom profiles remain available
-while HAYA Pet still sets the per-session environment and watchers. Codex stores
-reviewed hook hashes in the active config layer; when a named profile is selected,
-HAYA Pet mirrors the already-trusted `hooks.json` state from base `config.toml`
-into that profile so users do not have to re-approve the same hooks.
+`claude --settings <file>`. **Codex** receives repeatable session-layer
+`-c hooks.<Event>=<TOML>` overrides. HAYA prepends those flags before the user's
+arguments, so a selected `-p`/`--profile` is not consumed and later explicit user
+`-c` values remain authoritative. The session-flags config source has a stable
+identity; HAYA also stores the resolved Node and dispatcher paths beside its
+state file so generated commands do not change with Node-manager launcher paths.
+
+The Codex injector is also a removal-only migrator. On the next online wrapped
+launch after upgrading, it removes HAYA-managed handlers from legacy
+`$CODEX_HOME/hooks.json` and selected-profile hook tables while preserving user
+hooks, unrelated settings, and unrelated trust state. It never installs a global
+replacement. Codex may request one final review when the source moves to session
+flags; unchanged later wrapped launches retain the same source and command values.
 Codex's hook command must be unquoted at the program position (it runs via
 `cmd /c`, which strips a leading quote) and its matchers can't use look-around
 (Rust regex) — see [known-issues.md](known-issues.md). Codex's L4 is **partial**:
