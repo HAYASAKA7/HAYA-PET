@@ -9,15 +9,24 @@ All notable changes to HAYA Pet are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.3.26]
+
 ### Changed
-- **Provider hooks now stop immediately when the HAYA companion is unavailable.**
-  Claude hook settings and provider watchers are skipped when an offline wrapper
-  starts. Codex keeps its stable user-level hook definitions for trust caching,
-  but they now invoke a lightweight dispatcher that exits before loading the full
-  reporter when there is no HAYA session or the companion cannot be reached.
-  Existing managed Codex reporter commands migrate to the dispatcher once, then
-  remain byte-stable. Antigravity and generic clients remain lifecycle-only and
-  do not install hooks.
+- **Provider integrations now avoid HAYA work while the companion is offline.**
+  The wrapper skips hook injection and provider watchers when it cannot connect
+  at startup. Hook commands use a lightweight dispatcher that exits before
+  loading the full reporter when an already-running session loses the companion.
+- **Codex live-status hooks are now isolated to HAYA-wrapped sessions.** HAYA
+  passes stable session-layer hook overrides without consuming the user's Codex
+  profile, and removes its legacy handlers from global, base, and local profile
+  configuration while preserving unrelated hooks and settings. Native Codex
+  sessions no longer load HAYA hooks.
+
+### Fixed
+- **Wrapped Codex now accepts HAYA hook overrides on Windows.** The shared
+  Windows command runner preserves backslashes that escape quotes inside complex
+  arguments, preventing Codex from parsing the hook TOML value as a string and
+  failing startup with `expected a sequence`.
 
 ## [0.3.25]
 

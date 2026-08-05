@@ -194,6 +194,13 @@ watcher starts. Native Codex launches never load or display HAYA hooks, includin
 while another HAYA-wrapped Codex session is active. Antigravity and generic
 clients do not install lifecycle hooks.
 
+An already-running wrapped Codex session is different: Codex snapshots its
+session hook overrides at process startup. If HAYA Pet quits afterward, Codex
+can still display and schedule the lightweight HAYA dispatcher, but the
+dispatcher exits without loading the full reporter or sending state. Use
+Codex's `/hooks` browser to disable those entries in the current process, or
+exit it and start native `codex`. See [known issues](docs/known-issues.md).
+
 Codex live status combines three sources: hooks report `thinking`/`idle`, a
 Codex-specific permission reporter maps approval requests from the session's
 resolved `approvals_reviewer` setting, and transcript watchers report tool/file

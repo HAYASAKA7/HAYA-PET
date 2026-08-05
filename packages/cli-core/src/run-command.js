@@ -328,7 +328,10 @@ function quoteShellArg(arg) {
   if (!/[\s"&|<>^()%!]/.test(value)) {
     return value;
   }
-  return `"${value.replace(/"/g, '""')}"`;
+  const escaped = value
+    .replace(/(\\*)"/g, (_, slashes) => `${slashes}${slashes}\\"`)
+    .replace(/(\\+)$/g, "$1$1");
+  return `"${escaped}"`;
 }
 
 function normalizeExitCode(closeResult) {

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { test } from "../../../test/harness.mjs";
@@ -103,6 +103,45 @@ test("launches a Windows .cmd shim via the shell and reports a valid pid", async
     const register = messages.find((message) => message.type === "register");
     assert.ok(register, "should send a register message");
     assert.ok(Number.isInteger(register.pid) && register.pid > 0, "pid must be a positive integer");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("preserves escaped quotes in arguments passed through a Windows .cmd shim", async () => {
+  if (process.platform !== "win32") {
+    return; // .cmd argument forwarding is Windows-specific
+  }
+
+  const dir = mkdtempSync(join(tmpdir(), "haya-pet-cmd-args-"));
+  const cmdPath = join(dir, "fake-cli.cmd");
+  const capturePath = join(dir, "capture-args.mjs");
+  const outputPath = join(dir, "args.json");
+  const hookArg = String.raw`hooks.Stop=[{ hooks = [{ type = "command", command = "C:\\Users\\cyanl\\node.exe \"D:\\Projects\\AI\\haya-pet\\apps\\cli\\src\\haya-pet-hook.js\" state idle", statusMessage = "HAYA Pet live status" }] }]`;
+
+  writeFileSync(
+    capturePath,
+    'import { writeFileSync } from "node:fs";\nwriteFileSync(process.argv[2], JSON.stringify(process.argv.slice(3)));\n'
+  );
+  writeFileSync(
+    cmdPath,
+    `@echo off\r\n"${process.execPath}" "${capturePath}" "${outputPath}" %*\r\n`
+  );
+
+  try {
+    const result = await runGenericCommand({
+      command: cmdPath,
+      args: ["-c", hookArg],
+      cwd: process.cwd(),
+      sessionId: "sess_cmd_args",
+      heartbeatIntervalMs: 50,
+      now: createClock(),
+      stdio: "ignore",
+      send: async () => {}
+    });
+
+    assert.equal(result.exitCode, 0);
+    assert.deepEqual(JSON.parse(readFileSync(outputPath, "utf8")), ["-c", hookArg]);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

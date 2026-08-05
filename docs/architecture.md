@@ -69,7 +69,10 @@ overrides. Hook commands themselves target the built-in-only
 `haya-pet-hook.js` dispatcher. It rejects invocations with no HAYA session before
 importing IPC modules, applies a 150 ms IPC connection deadline, and loads the
 full `haya-pet.js` reporter only after a companion connection is established.
-This also covers a companion that stops during a live session.
+If the companion stops during a live session, the dispatcher exits at that IPC
+check. A client may still schedule the already-loaded hook command: Codex
+snapshots its session overrides at process startup and exposes no supported
+external API for HAYA to remove them from the running process.
 Antigravity and generic adapters have no lifecycle hooks, so their offline path
 is already limited to wrapper lifecycle behavior.
 
@@ -90,7 +93,9 @@ session flags; unchanged later wrapped launches retain the same source and
 command values.
 Codex's hook command must be unquoted at the program position (it runs via
 `cmd /c`, which strips a leading quote) and its matchers can't use look-around
-(Rust regex) — see [known-issues.md](known-issues.md). Codex's L4 is **partial**:
+(Rust regex). The Windows `.cmd` launcher also preserves backslashes before
+embedded quotes so Codex receives generated TOML overrides byte-for-byte. See
+[known-issues.md](known-issues.md). Codex's L4 is **partial**:
 `PreToolUse` doesn't fire upstream yet, so tool activity comes from an L3
 transcript watcher tailing the session rollout; the same watcher also treats
 `token_count` rate-limit markers and empty `task_complete` records as turn-ending

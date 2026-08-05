@@ -2,6 +2,22 @@
 
 Issues found in live use, with their current status.
 
+## Open: a running Codex session retains hooks after HAYA Pet quits
+
+- **Symptom:** Start Codex through HAYA Pet while the companion is online, then
+  choose **Quit** from the pet menu. The existing Codex session can continue to
+  display `HAYA Pet live status` and schedule the HAYA hook dispatcher.
+- **Root cause:** Codex resolves session-layer `-c hooks.<Event>=...` overrides
+  when its process starts. HAYA Pet cannot remove those definitions from the
+  already-running Codex process, and Codex has no supported external runtime
+  hook-removal API.
+- **Impact and workaround:** The dispatcher checks the companion IPC endpoint
+  and exits without loading the full HAYA reporter or sending state while the
+  companion is offline. To remove hook scheduling from the current Codex
+  process, disable the HAYA entries through Codex's `/hooks` browser. Otherwise,
+  exit that process and start native `codex`; a native launch receives no HAYA
+  session hooks.
+
 ## ✅ Resolved: native Codex loaded HAYA hooks outside wrapped sessions
 
 - **Symptom:** After enabling HAYA live status, a normal native Codex launch could
