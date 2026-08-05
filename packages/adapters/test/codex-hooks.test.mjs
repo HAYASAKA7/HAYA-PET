@@ -2,10 +2,48 @@
 import assert from "node:assert/strict";
 import { test } from "../../../test/harness.mjs";
 import {
+  buildCodexHookConfigArgs,
   buildCodexHookSettings,
   mapCodexEventToState,
   serializeCodexHooksToml
 } from "../src/codex-hooks.js";
+
+test("buildCodexHookConfigArgs emits one TOML override per hook event", () => {
+  const args = buildCodexHookConfigArgs({
+    hooks: {
+      Stop: [{
+        matcher: "manual",
+        hooks: [{
+          type: "command",
+          command: 'C:\\node.exe "C:\\pet\\hook.js" state idle',
+          statusMessage: "HAYA Pet live status"
+        }]
+      }],
+      UserPromptSubmit: [{ hooks: [{ type: "command", command: "node pet.js state thinking" }] }]
+    }
+  });
+
+  assert.deepEqual(args.filter((value) => value === "-c"), ["-c", "-c"]);
+  assert.match(args[1], /^hooks\.Stop=\[/);
+  assert.match(args[1], /matcher = "manual"/);
+  assert.match(args[1], /statusMessage = "HAYA Pet live status"/);
+  assert.match(args[1], /C:\\\\node\.exe/);
+  assert.match(args[3], /^hooks\.UserPromptSubmit=\[/);
+});
+
+test("buildCodexHookConfigArgs serializes supported scalar values and rejects unsupported ones", () => {
+  const [flag, value] = buildCodexHookConfigArgs({
+    hooks: { Stop: [{ enabled: true, priority: 1, hooks: [] }] }
+  });
+
+  assert.equal(flag, "-c");
+  assert.match(value, /enabled = true/);
+  assert.match(value, /priority = 1/);
+  assert.throws(
+    () => buildCodexHookConfigArgs({ hooks: { Stop: [{ value: undefined }] } }),
+    /Unsupported TOML value/
+  );
+});
 
 test("mapCodexEventToState covers activity events", () => {
   assert.equal(mapCodexEventToState("UserPromptSubmit"), "thinking");

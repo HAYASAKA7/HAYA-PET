@@ -147,6 +147,32 @@ function quote(value) {
   return `"${String(value).replace(/"/g, '\\"')}"`;
 }
 
+// Serialize hook settings as repeatable Codex session config overrides. Keeping
+// one value per event lets Codex merge these with all unrelated config layers.
+export function buildCodexHookConfigArgs(settings) {
+  return Object.entries(settings.hooks ?? {}).flatMap(([event, entries]) => [
+    "-c",
+    `hooks.${event}=${tomlValue(entries)}`
+  ]);
+}
+
+function tomlValue(value) {
+  if (typeof value === "string") {
+    return tomlString(value);
+  }
+  if (typeof value === "boolean" || (typeof value === "number" && Number.isFinite(value))) {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(tomlValue).join(", ")}]`;
+  }
+  if (value && typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype) {
+    const fields = Object.entries(value).map(([key, field]) => `${key} = ${tomlValue(field)}`);
+    return `{ ${fields.join(", ")} }`;
+  }
+  throw new TypeError(`Unsupported TOML value: ${String(value)}`);
+}
+
 // Serialize a hook settings object (from buildCodexHookSettings) to the TOML form
 // Codex loads from a config layer: `[[hooks.<Event>]]` (with optional `matcher`)
 // each containing `[[hooks.<Event>.hooks]]` command entries. Pure (no I/O).
