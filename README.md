@@ -208,10 +208,10 @@ selected Codex profile and HAYA live status. Explicit user `-c` values come late
 and remain authoritative.
 
 On the first wrapped Codex launch after upgrading, HAYA Pet removes only its
-legacy handlers from `$CODEX_HOME/hooks.json` and from the selected profile,
+legacy handlers from `$CODEX_HOME/hooks.json`, base config, and local profiles,
 preserving unrelated hooks and settings. Codex may ask for one final hook review
-because the source changes to stable session flags; subsequent unchanged wrapped
-launches reuse that trust identity.
+because the source changes to stable session flags; subsequent unchanged
+wrapped launches reuse that trust identity.
 
 Per-tool `PreToolUse` hooks still depend on an upstream Codex gap
 ([openai/codex#16732](https://github.com/openai/codex/issues/16732)); the

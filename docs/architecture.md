@@ -83,10 +83,11 @@ state file so generated commands do not change with Node-manager launcher paths.
 
 The Codex injector is also a removal-only migrator. On the next online wrapped
 launch after upgrading, it removes HAYA-managed handlers from legacy
-`$CODEX_HOME/hooks.json` and selected-profile hook tables while preserving user
-hooks, unrelated settings, and unrelated trust state. It never installs a global
-replacement. Codex may request one final review when the source moves to session
-flags; unchanged later wrapped launches retain the same source and command values.
+`$CODEX_HOME/hooks.json`, base config, and every local profile while preserving
+user hooks, unrelated settings, and unrelated trust state. It never installs a
+global replacement. Codex may request one final review when the source moves to
+session flags; unchanged later wrapped launches retain the same source and
+command values.
 Codex's hook command must be unquoted at the program position (it runs via
 `cmd /c`, which strips a leading quote) and its matchers can't use look-around
 (Rust regex) — see [known-issues.md](known-issues.md). Codex's L4 is **partial**:

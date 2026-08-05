@@ -161,8 +161,9 @@ test("injectCodexHooks removes legacy profile hooks without copying global trust
   const home = mkdtempSync(join(tmpdir(), "haya-codex-home-"));
   try {
     const hooksPath = join(home, "hooks.json");
-    writeFileSync(join(home, "config.toml"), "[hooks.state.'" + hooksPath + ":stop:0:0']\ntrusted_hash = \"sha256:global\"\n", "utf8");
+    writeFileSync(join(home, "config.toml"), "[[hooks.Stop]]\n[[hooks.Stop.hooks]]\ntype = \"command\"\ncommand = 'old-node \"C:\\app\\haya-pet.js\" state idle'\n\n[hooks.state.'" + hooksPath + ":stop:0:0']\ntrusted_hash = \"sha256:global\"\n", "utf8");
     writeFileSync(join(home, "sakana.config.toml"), "approvals_reviewer = \"auto_review\"\n\n# haya-pet live-status hooks profile. Managed by haya-pet; safe to delete.\n[[hooks.Stop]]\nmatcher = \"manual\"\n[[hooks.Stop.hooks]]\ntype = \"command\"\ncommand = 'old-node \"C:\\app\\haya-pet.js\" state idle'\n\n[[hooks.Stop.hooks]]\ntype = \"command\"\ncommand = \"echo user\"\n", "utf8");
+    writeFileSync(join(home, "fugu.config.toml"), "[[hooks.Stop]]\n[[hooks.Stop.hooks]]\ntype = \"command\"\ncommand = 'old-node \"C:\\app\\haya-pet-hook.js\" state idle'\n[[hooks.Stop.hooks]]\ntype = \"command\"\ncommand = \"echo fugu\"\n", "utf8");
 
     injectCodexHooks({
       nodePath: "n",
@@ -178,6 +179,12 @@ test("injectCodexHooks removes legacy profile hooks without copying global trust
     assert.ok(profile.includes('command = "echo user"'));
     assert.ok(!profile.includes("haya-pet.js"));
     assert.ok(!profile.includes("sha256:global"));
+    const base = readFileSync(join(home, "config.toml"), "utf8");
+    assert.ok(!base.includes("haya-pet.js"));
+    assert.ok(base.includes("sha256:global"), "legacy trust metadata is left untouched");
+    const unselectedProfile = readFileSync(join(home, "fugu.config.toml"), "utf8");
+    assert.ok(!unselectedProfile.includes("haya-pet-hook.js"));
+    assert.ok(unselectedProfile.includes('command = "echo fugu"'));
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

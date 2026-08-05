@@ -1,7 +1,14 @@
 // Builds Codex hook overrides for the wrapped process and migrates HAYA-managed
 // hooks out of global Codex configuration. A stable HAYA-owned command record
 // keeps command text unchanged across sessions so Codex can retain hook trust.
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  writeFileSync
+} from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,8 +28,7 @@ export function injectCodexHooks({
   cliPath,
   codexHome,
   commandStatePath,
-  env = process.env,
-  profileName
+  env = process.env
 } = {}) {
   const fallback = {
     nodePath: nodePath ?? safeRealpath(process.execPath),
@@ -44,7 +50,7 @@ export function injectCodexHooks({
   if (hadHooksFile) {
     writeMigratedHooksIfChanged(hooksPath, existing, removeManagedHooksJson(existing));
   }
-  removeSelectedProfileLegacyHooks({ home, profileName });
+  removeLegacyConfigHooks(home);
 
   const settings = markManagedHooks(buildCodexHookSettings(commandPaths));
   return {
@@ -55,20 +61,28 @@ export function injectCodexHooks({
   };
 }
 
-function removeSelectedProfileLegacyHooks({ home, profileName }) {
-  if (!home || !isCodexProfileName(profileName)) {
-    return;
+function removeLegacyConfigHooks(home) {
+  for (const configPath of listCodexConfigPaths(home)) {
+    const config = readFileSync(configPath, "utf8");
+    const nextConfig = removeLegacyHayaTomlHooks(config);
+    if (nextConfig !== normalizeNewlines(config)) {
+      writeFileSync(configPath, nextConfig, "utf8");
+    }
   }
+}
 
-  const profileConfigPath = join(home, profileName + ".config.toml");
-  const profileConfig = readOptionalText(profileConfigPath);
-  if (profileConfig === undefined) {
-    return;
-  }
-
-  const nextProfileConfig = removeLegacyHayaTomlHooks(profileConfig);
-  if (nextProfileConfig !== normalizeNewlines(profileConfig)) {
-    writeFileSync(profileConfigPath, nextProfileConfig, "utf8");
+function listCodexConfigPaths(home) {
+  try {
+    return readdirSync(home, { withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) => entry.name)
+      .filter((name) => name === "config.toml" || name.endsWith(".config.toml"))
+      .map((name) => join(home, name));
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return [];
+    }
+    throw error;
   }
 }
 
@@ -154,10 +168,6 @@ function isTomlTableHeader(line) {
 
 function normalizeNewlines(text) {
   return String(text).replace(/\r\n/g, "\n");
-}
-
-function isCodexProfileName(value) {
-  return typeof value === "string" && /^[A-Za-z0-9_-]+$/.test(value);
 }
 
 function safeRealpath(target) {

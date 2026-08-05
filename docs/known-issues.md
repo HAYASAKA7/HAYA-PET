@@ -18,10 +18,10 @@ Issues found in live use, with their current status.
   those values. The wrapper does not consume `-p`/`--profile`, and its generated
   flags precede user arguments so later explicit `-c` values stay authoritative.
   The next online wrapped launch removes only legacy HAYA handlers from global
-  `hooks.json` and the selected profile while preserving unrelated hooks and
-  config. Stable HAYA-owned command metadata prevents Node path churn from
-  changing the hook definition. Codex may request one final trust review when
-  migrating to the session source.
+  `hooks.json`, base config, and every local profile while preserving unrelated
+  hooks and config. Stable HAYA-owned command metadata prevents Node path churn
+  from changing the hook definition. Codex may request one final trust review
+  when migrating to the session source.
 
 ## ✅ Resolved: offline companions still caused full hook startup
 
