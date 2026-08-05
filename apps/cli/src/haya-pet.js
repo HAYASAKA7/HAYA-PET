@@ -383,7 +383,7 @@ async function runRunCommand(parsed, dependencies) {
   // "review hooks" trust prompt; we never disrupt the user's session uninvited.
   // Both clients report live status via the `haya-pet state` reporter (no PTY, so
   // Shift+Tab works); the session id rides in via HAYA_PET_SESSION_ID.
-  const hooksOn = await resolveHooksEnabled(env, dependencies);
+  const hooksOn = messageSender.online && await resolveHooksEnabled(env, dependencies);
 
   // Claude Code: inject a stable `--settings` file.
   const claudeHooksOn = hooksOn && parsed.clientId === "claude-code";
@@ -950,6 +950,7 @@ function parseRunArgs(args) {
 async function createMessageSender(dependencies) {
   if (typeof dependencies.send === "function") {
     return {
+      online: true,
       send: dependencies.send,
       close: async () => {}
     };
@@ -961,7 +962,7 @@ async function createMessageSender(dependencies) {
     // No daemon and could not auto-start: still run the wrapped command and
     // preserve its exit code. The pet just won't reflect this session (plan
     // section 39 — wrappers degrade gracefully).
-    return { send: noopSend, close: noopClose };
+    return { online: false, send: noopSend, close: noopClose };
   }
 
   if (started) {
@@ -974,6 +975,7 @@ async function createMessageSender(dependencies) {
   // is fine (the registry stales-out dead sessions); losing the terminal isn't.
   const deadlineMs = dependencies.senderDeadlineMs ?? SENDER_DEADLINE_MS;
   return {
+    online: true,
     send: (message) => raceDeadline(client.send(message), deadlineMs),
     close: () => raceDeadline(client.close(), deadlineMs)
   };

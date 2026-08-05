@@ -454,6 +454,58 @@ const hooksStateFile = (hooksEnabled) => () => ({
   save: async (state) => state
 });
 
+test("offline companion skips Claude hooks and transcript watcher", async () => {
+  const calls = [];
+  let injected = 0;
+  let watched = 0;
+
+  await runAiPet(["run", "--client", "claude-code", "--", "claude"], {
+    cwd: process.cwd(),
+    env: { USERPROFILE: "C:\\Users\\A" },
+    autoStart: false,
+    createIpcClient: async () => { throw new Error("offline"); },
+    createStateFile: hooksStateFile(true),
+    injectClaudeHooks: () => { injected += 1; return { settingsPath: "x", cleanup: () => {} }; },
+    watchClaudeTranscript: () => { watched += 1; return { stop: () => {} }; },
+    runGenericCommand: async (options) => {
+      calls.push(options);
+      return { sessionId: options.sessionId, pid: 1, exitCode: 0 };
+    }
+  });
+
+  assert.equal(injected, 0);
+  assert.equal(watched, 0);
+  assert.deepEqual(calls[0].args, []);
+  assert.equal(calls[0].env.HAYA_PET_SESSION_ID, undefined);
+});
+
+test("offline companion skips Codex hook installation and watchers", async () => {
+  const calls = [];
+  let injected = 0;
+  let transcriptWatches = 0;
+  let guardianWatches = 0;
+
+  await runAiPet(["run", "--client", "codex", "--", "codex"], {
+    cwd: process.cwd(),
+    env: { USERPROFILE: "C:\\Users\\A" },
+    autoStart: false,
+    createIpcClient: async () => { throw new Error("offline"); },
+    createStateFile: hooksStateFile(true),
+    injectCodexHooks: () => { injected += 1; return { cleanup: () => {} }; },
+    watchCodexTranscript: () => { transcriptWatches += 1; return { stop: () => {} }; },
+    watchCodexGuardianReviews: () => { guardianWatches += 1; return { stop: () => {} }; },
+    runGenericCommand: async (options) => {
+      calls.push(options);
+      return { sessionId: options.sessionId, pid: 1, exitCode: 0 };
+    }
+  });
+
+  assert.equal(injected, 0);
+  assert.equal(transcriptWatches, 0);
+  assert.equal(guardianWatches, 0);
+  assert.equal(calls[0].env.HAYA_PET_SESSION_ID, undefined);
+});
+
 test("claude-code does NOT inject hooks by default (safe out-of-box)", async () => {
   const calls = [];
   let injected = 0;
