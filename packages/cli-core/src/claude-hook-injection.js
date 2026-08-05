@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildClaudeHookSettings } from "../../adapters/src/claude-hooks.js";
 
-const DEFAULT_CLI_PATH = fileURLToPath(new URL("../../../apps/cli/src/haya-pet.js", import.meta.url));
+const DEFAULT_CLI_PATH = fileURLToPath(new URL("../../../apps/cli/src/haya-pet-hook.js", import.meta.url));
 const SETTINGS_FILE = "haya-pet-claude-settings.json";
 
 export function injectClaudeHooks({ nodePath, cliPath } = {}) {

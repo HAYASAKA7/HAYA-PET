@@ -28,6 +28,19 @@ test("injectCodexHooks writes stable user-level hooks into CODEX_HOME", () => {
   }
 });
 
+test("injectCodexHooks uses the offline dispatcher by default", () => {
+  const home = mkdtempSync(join(tmpdir(), "haya-codex-home-"));
+  try {
+    const result = injectCodexHooks({ codexHome: home });
+    const json = JSON.parse(readFileSync(result.hooksPath, "utf8"));
+    const command = json.hooks.Stop[0].hooks[0].command;
+    assert.match(command, /haya-pet-hook\.js/);
+    assert.match(command, /state idle$/);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test("injectCodexHooks honors CODEX_HOME from env and is stable across calls", () => {
   const home = mkdtempSync(join(tmpdir(), "haya-codex-home-"));
   try {
@@ -52,7 +65,7 @@ test("injectCodexHooks keeps a valid existing HAYA command path when launch path
     mkdirSync(stableNodeDir, { recursive: true });
     mkdirSync(stableCliDir, { recursive: true });
     const stableNode = join(stableNodeDir, "node.exe");
-    const stableCli = join(stableCliDir, "haya-pet.js");
+    const stableCli = join(stableCliDir, "haya-pet-hook.js");
     writeFileSync(stableNode, "", "utf8");
     writeFileSync(stableCli, "", "utf8");
 
@@ -74,7 +87,7 @@ test("injectCodexHooks keeps a valid existing HAYA command path when launch path
 
     injectCodexHooks({
       nodePath: join(home, "new-node", "node.exe"),
-      cliPath: join(home, "new-cli", "haya-pet.js"),
+      cliPath: join(home, "new-cli", "haya-pet-hook.js"),
       codexHome: home
     });
 
@@ -88,6 +101,47 @@ test("injectCodexHooks keeps a valid existing HAYA command path when launch path
     );
     assert.ok(!commands.some((command) => command.includes("new-node")), "changed launch node path is ignored");
     assert.ok(!commands.some((command) => command.includes("new-cli")), "changed launch cli path is ignored");
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("injectCodexHooks migrates a managed legacy reporter path once", () => {
+  const home = mkdtempSync(join(tmpdir(), "haya-codex-home-"));
+  try {
+    const legacyNode = join(home, "legacy-node.exe");
+    const legacyCli = join(home, "haya-pet.js");
+    const dispatcherNode = join(home, "current-node.exe");
+    const dispatcherCli = join(home, "haya-pet-hook.js");
+    writeFileSync(legacyNode, "", "utf8");
+    writeFileSync(legacyCli, "", "utf8");
+    writeFileSync(join(home, "hooks.json"), JSON.stringify({
+      hooks: {
+        Stop: [{
+          hooks: [{
+            type: "command",
+            command: `${legacyNode} "${legacyCli}" state idle`,
+            statusMessage: "HAYA Pet live status"
+          }]
+        }]
+      }
+    }, null, 2), "utf8");
+
+    const options = {
+      nodePath: dispatcherNode,
+      cliPath: dispatcherCli,
+      codexHome: home
+    };
+    const result = injectCodexHooks(options);
+    const first = readFileSync(result.hooksPath, "utf8");
+    const commands = Object.values(JSON.parse(first).hooks)
+      .flatMap((entries) => entries.flatMap((entry) => entry.hooks.map((hook) => hook.command)));
+
+    assert.ok(commands.every((command) => command.startsWith(`${dispatcherNode} "${dispatcherCli}" `)));
+    assert.ok(!commands.some((command) => command.includes(legacyCli)));
+
+    injectCodexHooks(options);
+    assert.equal(readFileSync(result.hooksPath, "utf8"), first, "migration is stable after the first rewrite");
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

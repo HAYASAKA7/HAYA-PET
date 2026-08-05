@@ -40,6 +40,7 @@ test("injectClaudeHooks resolves real node + cli paths by default", () => {
   const injected = injectClaudeHooks();
   const parsed = JSON.parse(readFileSync(injected.settingsPath, "utf8"));
   const cmd = parsed.hooks.Stop[0].hooks[0].command;
+  assert.match(cmd, /haya-pet-hook\.js/);
   assert.match(cmd, /state idle$/);
   assert.ok(cmd.trim().length > "state idle".length);
 });

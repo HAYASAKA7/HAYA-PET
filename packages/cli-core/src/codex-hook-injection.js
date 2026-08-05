@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildCodexHookSettings } from "../../adapters/src/codex-hooks.js";
 
-const DEFAULT_CLI_PATH = fileURLToPath(new URL("../../../apps/cli/src/haya-pet.js", import.meta.url));
+const DEFAULT_CLI_PATH = fileURLToPath(new URL("../../../apps/cli/src/haya-pet-hook.js", import.meta.url));
 const HOOKS_FILE = "hooks.json";
 const HAYA_HOOK_STATUS = "HAYA Pet live status";
 
@@ -266,7 +266,7 @@ function parseHayaHookCommandPaths(command) {
     return undefined;
   }
 
-  const match = /^(?<nodePath>.+?node(?:\.exe)?)\s+"(?<cliPath>[^"]*haya-pet\.js)"\s+(?:state|codex-permission-request)\b/i.exec(command);
+  const match = /^(?<nodePath>.+?node(?:\.exe)?)\s+"(?<cliPath>[^"]*haya-pet-hook\.js)"\s+(?:state|codex-permission-request)\b/i.exec(command);
   if (!match?.groups) {
     return undefined;
   }
@@ -381,7 +381,7 @@ function isLegacyHayaPetCommand(command) {
   if (typeof command !== "string") {
     return false;
   }
-  return /haya-pet\.js(?:\\?")?\s+(state|codex-permission-request)\b/.test(command);
+  return /haya-pet(?:-hook)?\.js(?:\\?")?\s+(state|codex-permission-request)\b/.test(command);
 }
 
 function isPlainObject(value) {
