@@ -617,7 +617,13 @@ function registerRendererHandlers() {
     if (!petWindow || petWindow.isDestroyed()) {
       return;
     }
-    showPetMenuPopup(Menu.buildFromTemplate(buildTrayMenuTemplate()), petWindow);
+    showPetMenuPopup({
+      menu: Menu.buildFromTemplate(buildTrayMenuTemplate()),
+      ownerWindow: petWindow,
+      tray,
+      platform: process.platform,
+      position: screen.getCursorScreenPoint()
+    });
   });
 
   // The pet moves within the overlay (CSS), so the renderer reports its new

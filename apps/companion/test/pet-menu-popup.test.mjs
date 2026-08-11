@@ -1,75 +1,101 @@
 import assert from "node:assert/strict";
 import { test } from "../../../test/harness.mjs";
-import * as petMenuPopup from "../src/main/pet-menu-popup.js";
+import { showPetMenuPopup } from "../src/main/pet-menu-popup.js";
 
-test("temporarily makes the pet window a focusable menu owner", () => {
-  const calls = [];
-  const ownerWindow = fakeWindow({ focusable: false, calls });
-  const menu = fakeMenu(calls);
+test("uses the tray to own a Windows overlay menu without focusing the pet window", () => {
+  const menu = fakeMenu();
+  const ownerWindow = fakeWindow({ focusable: false });
+  const tray = fakeTray();
+  const position = { x: 240, y: 360 };
 
-  assert.equal(petMenuPopup.showPetMenuPopup(menu, ownerWindow), true);
-  assert.deepEqual(calls, ["setFocusable:true", "focus", "popup"]);
-  assert.equal(menu.popupOptions.window, ownerWindow);
-
-  menu.popupOptions.callback();
-
-  assert.deepEqual(calls, ["setFocusable:true", "focus", "popup", "setFocusable:false"]);
+  assert.equal(
+    showPetMenuPopup({ menu, ownerWindow, tray, platform: "win32", position }),
+    true
+  );
+  assert.deepEqual(tray.popup, { menu, position });
+  assert.equal(menu.popupOptions, undefined);
 });
 
-test("uses a focusable fallback window without changing its focusability", () => {
-  const calls = [];
-  const ownerWindow = fakeWindow({ focusable: true, calls });
-  const menu = fakeMenu(calls);
+test("uses a focusable fallback window as the menu owner", () => {
+  const menu = fakeMenu();
+  const ownerWindow = fakeWindow({ focusable: true });
 
-  assert.equal(petMenuPopup.showPetMenuPopup(menu, ownerWindow), true);
-  assert.deepEqual(calls, ["popup"]);
-  assert.equal(menu.popupOptions.window, ownerWindow);
+  assert.equal(
+    showPetMenuPopup({ menu, ownerWindow, tray: fakeTray(), platform: "win32" }),
+    true
+  );
+  assert.deepEqual(menu.popupOptions, { window: ownerWindow });
+});
 
-  menu.popupOptions.callback();
+test("keeps the ownerless popup path for non-Windows nonfocusable overlays", () => {
+  const menu = fakeMenu();
+  const ownerWindow = fakeWindow({ focusable: false });
 
-  assert.deepEqual(calls, ["popup"]);
+  assert.equal(showPetMenuPopup({ menu, ownerWindow, platform: "darwin" }), true);
+  assert.deepEqual(menu.popupOptions, {});
+});
+
+test("does not open a Windows overlay menu without a live tray owner", () => {
+  const menu = fakeMenu();
+  const ownerWindow = fakeWindow({ focusable: false });
+
+  assert.equal(showPetMenuPopup({ menu, ownerWindow, platform: "win32" }), false);
+  assert.equal(
+    showPetMenuPopup({
+      menu,
+      ownerWindow,
+      tray: fakeTray({ destroyed: true }),
+      platform: "win32"
+    }),
+    false
+  );
+  assert.equal(menu.popupOptions, undefined);
 });
 
 test("does not open the pet menu without a live owner window", () => {
-  const calls = [];
-  const menu = fakeMenu(calls);
+  const menu = fakeMenu();
 
-  assert.equal(petMenuPopup.showPetMenuPopup(menu, undefined), false);
+  assert.equal(showPetMenuPopup({ menu, ownerWindow: undefined, platform: "win32" }), false);
   assert.equal(
-    petMenuPopup.showPetMenuPopup(menu, fakeWindow({ focusable: false, destroyed: true, calls })),
+    showPetMenuPopup({
+      menu,
+      ownerWindow: fakeWindow({ focusable: false, destroyed: true }),
+      tray: fakeTray(),
+      platform: "win32"
+    }),
     false
   );
-  assert.deepEqual(calls, []);
+  assert.equal(menu.popupOptions, undefined);
 });
 
-test("restores a nonfocusable owner when opening the menu throws", () => {
-  const calls = [];
-  const ownerWindow = fakeWindow({ focusable: false, calls });
-  const error = new Error("popup failed");
-  const menu = fakeMenu(calls, error);
-
-  assert.throws(() => petMenuPopup.showPetMenuPopup(menu, ownerWindow), error);
-  assert.deepEqual(calls, ["setFocusable:true", "focus", "popup", "setFocusable:false"]);
-});
-
-function fakeWindow({ focusable, destroyed = false, calls }) {
+function fakeWindow({ focusable, destroyed = false }) {
   return {
     isDestroyed: () => destroyed,
     isFocusable: () => focusable,
-    setFocusable: (next) => calls.push(`setFocusable:${next}`),
-    focus: () => calls.push("focus")
+    setFocusable: () => {
+      throw new Error("pet window focusability must not change");
+    },
+    focus: () => {
+      throw new Error("pet window must not receive focus");
+    }
   };
 }
 
-function fakeMenu(calls, popupError) {
+function fakeMenu() {
   return {
     popupOptions: undefined,
     popup(options) {
       this.popupOptions = options;
-      calls.push("popup");
-      if (popupError) {
-        throw popupError;
-      }
+    }
+  };
+}
+
+function fakeTray({ destroyed = false } = {}) {
+  return {
+    popup: undefined,
+    isDestroyed: () => destroyed,
+    popUpContextMenu(menu, position) {
+      this.popup = { menu, position };
     }
   };
 }

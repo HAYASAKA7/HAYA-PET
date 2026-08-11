@@ -1,30 +1,17 @@
-export function showPetMenuPopup(menu, ownerWindow) {
+export function showPetMenuPopup({ menu, ownerWindow, tray, platform, position }) {
   if (!menu || !ownerWindow || ownerWindow.isDestroyed?.()) {
     return false;
   }
 
-  const restoreFocusability = ownerWindow.isFocusable?.() === false;
-  let restored = false;
-  const restore = () => {
-    if (restored || !restoreFocusability || ownerWindow.isDestroyed?.()) {
-      return;
+  const nonfocusable = ownerWindow.isFocusable?.() === false;
+  if (platform === "win32" && nonfocusable) {
+    if (!tray || tray.isDestroyed?.()) {
+      return false;
     }
-    restored = true;
-    ownerWindow.setFocusable(false);
-  };
-
-  if (restoreFocusability) {
-    ownerWindow.setFocusable(true);
-  }
-
-  try {
-    if (restoreFocusability) {
-      ownerWindow.focus();
-    }
-    menu.popup({ window: ownerWindow, callback: restore });
+    tray.popUpContextMenu(menu, position);
     return true;
-  } catch (error) {
-    restore();
-    throw error;
   }
+
+  menu.popup(nonfocusable ? {} : { window: ownerWindow });
+  return true;
 }
