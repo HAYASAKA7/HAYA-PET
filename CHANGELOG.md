@@ -9,6 +9,15 @@ All notable changes to HAYA Pet are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.3.27]
+
+### Fixed
+- **Pet right-click menus now dismiss outside the overlay without exposing HAYA
+  in the taskbar.** On Windows, the companion uses its existing tray icon as the
+  native popup-menu owner. The transparent pet window remains non-focusable and
+  `skipTaskbar` throughout the interaction, while clicks in another app or blank
+  desktop space close the menu normally.
+
 ## [0.3.26]
 
 ### Changed

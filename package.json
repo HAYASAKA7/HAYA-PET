@@ -1,6 +1,6 @@
 {
   "name": "@hayasaka7/haya-pet",
-  "version": "0.3.26",
+  "version": "0.3.27",
   "type": "module",
   "description": "Generic AI CLI pet runtime foundation.",
   "keywords": [

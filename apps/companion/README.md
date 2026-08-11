@@ -25,6 +25,7 @@ unit-tested pure packages and is imported directly:
 | Adapter capabilities | `packages/adapters` |
 | Task status / controls / reply safety | `packages/task-core` |
 | Tray menu model | `src/main/tray-menu.js` |
+| Pet context-menu ownership | `src/main/pet-menu-popup.js` |
 | Daemon singleton | `packages/daemon-core/src/singleton.js` |
 
 ```
@@ -78,6 +79,9 @@ so the companion starts with your last selected pet.
 
 - The overlay never steals focus (`focusable: false` on supported platforms) and
   is click-through except over the pet and bubbles.
+- On Windows, the pet's right-click menu is owned by the existing tray icon, not
+  the overlay. Outside clicks dismiss the native menu without making the pet
+  window focusable or visible in the taskbar.
 - The main process recreates the overlay after real GPU/renderer crashes and
   writes `overlay-crash.log` in the platform log directory for diagnostics.
 - The companion sets HAYA-owned Electron `userData`, `sessionData`, and crash

@@ -156,6 +156,14 @@ positioned inside the window and dragged via CSS; the bubble panel is placed on
 whichever side of the pet has room so it stays fully on-screen. The pet currently
 lives on a single display's work area.
 
+The pet's right-click menu reuses the tray-menu model. On Windows, where an
+ownerless native popup can remain open after focus moves to another application,
+the existing tray icon owns the popup at the cursor position. The overlay itself
+stays non-focusable and excluded from the taskbar; no temporary window or
+focusability change is used. Focusable fallback windows own their popup directly,
+while non-focusable overlays on other platforms retain Electron's ownerless popup
+path.
+
 The companion treats the overlay BrowserWindow as replaceable runtime state. If a
 real renderer or GPU process crash (`crashed`, `oom`, `launch-failed`, or
 `integrity-failure`) blanks the transparent surface while the daemon stays alive,
