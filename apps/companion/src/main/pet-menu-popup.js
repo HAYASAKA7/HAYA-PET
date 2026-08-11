@@ -1,15 +1,30 @@
-export function resolvePetMenuPopupOptions(ownerWindow) {
-  if (!ownerWindow || ownerWindow.isDestroyed?.()) {
-    return {};
+export function showPetMenuPopup(menu, ownerWindow) {
+  if (!menu || !ownerWindow || ownerWindow.isDestroyed?.()) {
+    return false;
   }
 
-  // The transparent pet overlay is intentionally non-focusable/click-through.
-  // Owning a native context menu from that window can leave the menu stuck until
-  // a click lands back on the pet region. Use an unowned popup in that mode so
-  // normal outside clicks dismiss the menu.
-  if (ownerWindow.isFocusable?.() === false) {
-    return {};
+  const restoreFocusability = ownerWindow.isFocusable?.() === false;
+  let restored = false;
+  const restore = () => {
+    if (restored || !restoreFocusability || ownerWindow.isDestroyed?.()) {
+      return;
+    }
+    restored = true;
+    ownerWindow.setFocusable(false);
+  };
+
+  if (restoreFocusability) {
+    ownerWindow.setFocusable(true);
   }
 
-  return { window: ownerWindow };
+  try {
+    if (restoreFocusability) {
+      ownerWindow.focus();
+    }
+    menu.popup({ window: ownerWindow, callback: restore });
+    return true;
+  } catch (error) {
+    restore();
+    throw error;
+  }
 }
