@@ -9,6 +9,17 @@ All notable changes to HAYA Pet are documented here. This project adheres to
 
 ## [Unreleased]
 
+## [0.3.28]
+
+### Fixed
+- **The desktop companion uses substantially less CPU and GPU while visible.**
+  Pet frames are drawn only at their manifest cadence instead of on every
+  display refresh, the working indicator shares that low-frequency clock, and
+  animation stops while the overlay is hidden.
+- **Codex guardian discovery no longer rescans the full rollout history every
+  700 ms.** Linked sessions inspect only relevant recent date folders, avoiding
+  repeated traversal of large multi-gigabyte `~/.codex/sessions` archives.
+
 ## [0.3.27]
 
 ### Fixed

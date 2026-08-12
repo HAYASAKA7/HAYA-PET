@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { appendFileSync, mkdirSync, mkdtempSync, utimesSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, mkdtempSync, readdirSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "../../../test/harness.mjs";
 import { watchCodexGuardianReviews } from "../src/codex-guardian-watcher.js";
+import { listRecentJsonlFiles } from "../src/codex-rollout-fs.js";
 import { writeSessionTranscriptLink } from "../src/session-transcript-link.js";
 
 const noopTimers = { setInterval: () => ({}), clearInterval: () => {} };
@@ -396,4 +397,29 @@ test("watchCodexGuardianReviews picks up a trunk created after watching began", 
   assert.deepEqual(events, [{ type: "review_started" }]);
 
   watcher.stop();
+});
+
+test("recent rollout discovery does not traverse session dates older than this run", () => {
+  const { root, dir } = makeSessionsRoot();
+  const oldDir = join(root, "2025", "01", "01");
+  mkdirSync(oldDir, { recursive: true });
+  writeFileSync(join(dir, "rollout-current.jsonl"), "{}\n");
+  writeFileSync(join(oldDir, "rollout-old.jsonl"), "{}\n");
+
+  let oldDirectoryReads = 0;
+  const trackedReaddir = (path, options) => {
+    if (String(path).includes(join("2025", "01", "01"))) {
+      oldDirectoryReads += 1;
+    }
+    return readdirSync(path, options);
+  };
+
+  const files = listRecentJsonlFiles(root, {
+    minTimestampMs: Date.parse("2026-06-12T01:00:00.000Z"),
+    now: () => Date.parse("2026-06-12T02:00:00.000Z"),
+    readdir: trackedReaddir
+  });
+
+  assert.deepEqual(files, [join(dir, "rollout-current.jsonl")]);
+  assert.equal(oldDirectoryReads, 0);
 });

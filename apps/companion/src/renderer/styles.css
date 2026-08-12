@@ -8,6 +8,7 @@
   --kind-failed: #e5687a;
   --kind-done: #5cd6a0;
   --kind-idle: rgba(255, 255, 255, 0.4);
+  --status-spin-angle: 0deg;
 }
 
 * {
@@ -310,11 +311,7 @@ body {
   border: 2px solid rgba(110, 168, 254, 0.25);
   border-top-color: var(--kind-working);
   background: transparent;
-  animation: status-spin 0.8s linear infinite;
-}
-
-@keyframes status-spin {
-  to { transform: rotate(360deg); }
+  transform: rotate(var(--status-spin-angle));
 }
 
 /* Respect a reduced-motion preference: snap the folder open/closed instead of

@@ -156,6 +156,13 @@ positioned inside the window and dragged via CSS; the bubble panel is placed on
 whichever side of the pet has room so it stays fully on-screen. The pet currently
 lives on a single display's work area.
 
+Sprite rendering follows each pet manifest's frame duration (normally 6-11
+frames per second) rather than the monitor refresh rate. A single timer advances
+both the canvas frame and the working-status indicator, redraws immediately when
+the action, image, or scale changes, and pauses while the overlay is hidden. This
+avoids continuously invalidating a transparent Electron surface when the visible
+sprite has not changed.
+
 The pet's right-click menu reuses the tray-menu model. On Windows, where an
 ownerless native popup can remain open after focus moves to another application,
 the existing tray icon owns the popup at the cursor position. The overlay itself

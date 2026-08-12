@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "../../../test/harness.mjs";
-import { getFrameAt, getActionDurationMs } from "../src/animator.js";
+import { getFrameAt, getActionDurationMs, getTimeToNextFrame } from "../src/animator.js";
 
 const manifest = { frameDurationMs: 100, actionFrameDurations: { idle: 200 } };
 
@@ -24,6 +24,13 @@ test("computes the full duration of an action loop", () => {
   assert.equal(getActionDurationMs("waving", manifest), 400);
   // idle has 6 frames at 200ms override
   assert.equal(getActionDurationMs("idle", manifest), 1200);
+});
+
+test("computes the time remaining until the next sprite frame", () => {
+  assert.equal(getTimeToNextFrame("running", 0, manifest), 100);
+  assert.equal(getTimeToNextFrame("running", 25, manifest), 75);
+  assert.equal(getTimeToNextFrame("running", 100, manifest), 100);
+  assert.equal(getTimeToNextFrame("idle", 250, manifest), 150);
 });
 
 test("rejects unknown actions", () => {

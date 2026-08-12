@@ -4,7 +4,11 @@
 
 import { CELL_HEIGHT, CELL_WIDTH, getFrameRect } from "../../../../packages/pet-core/src/atlas.js";
 import { clampScale, DEFAULT_SCALE, resolveScaleFromDrag } from "../../../../packages/pet-core/src/pet-scale.js";
-import { getActionDurationMs, getFrameAt } from "../../../../packages/pet-core/src/animator.js";
+import {
+  getActionDurationMs,
+  getFrameAt,
+  getTimeToNextFrame
+} from "../../../../packages/pet-core/src/animator.js";
 import {
   clearDragAction,
   createAnimationState,
@@ -22,6 +26,7 @@ import { createBubbleList } from "./session-bubbles.js";
 import { createOverlayHoverClearer } from "./overlay-hover.js";
 import { createOverlayTooltip } from "./overlay-tooltip.js";
 import { isOpaqueAlpha, isPointInsideRect } from "./pet-hit-test.js";
+import { createPetAnimationTimer } from "./pet-animation-timer.js";
 import { buildOverlayShapeRects, resolveElementLayoutRect, sameOverlayShape } from "./overlay-shape.js";
 
 const bridge = window.aiPet;
@@ -57,8 +62,6 @@ const bubbleList = createBubbleList(panelEl, { onRender: placePanel });
 let animationState = createAnimationState("idle");
 let manifest = { frameDurationMs: 120 };
 let spritesheet;
-let currentAction = "idle";
-let actionStart = 0;
 let dragOffset = { x: 0, y: 0 };
 let previousSessionStates = {};
 // The pet lives at this work-area-relative position inside the full-screen
@@ -90,6 +93,7 @@ function setupPet(config) {
     const image = new Image();
     image.onload = () => {
       spritesheet = image;
+      animationTimer.invalidate();
     };
     image.src = config.pet.spritesheetUrl;
   }
@@ -110,6 +114,7 @@ function applyPetScale(scale) {
   canvas.width = Math.round(BASE_SIZE.width * petScale);
   canvas.height = Math.round(BASE_SIZE.height * petScale);
   applyPetPosition(petLocal);
+  animationTimer?.invalidate();
 }
 
 function clampPetLocal(pos) {
@@ -158,18 +163,6 @@ function placePanel() {
   scheduleOverlayShape();
 }
 
-function frameLoop(now) {
-  const action = resolveCurrentAction(animationState, now);
-  if (action !== currentAction) {
-    currentAction = action;
-    actionStart = now;
-  }
-
-  const frameIndex = getFrameAt(action, now - actionStart, manifest);
-  draw(action, frameIndex);
-  requestAnimationFrame(frameLoop);
-}
-
 function draw(action, frameIndex) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -194,8 +187,23 @@ function drawPlaceholder(action, frameIndex) {
   ctx.fillText(`frame ${frameIndex}`, canvas.width / 2, canvas.height / 2 + 20);
 }
 
+const animationTimer = createPetAnimationTimer({
+  getState: () => animationState,
+  resolveAction: resolveCurrentAction,
+  getFrame: (action, elapsed) => getFrameAt(action, elapsed, manifest),
+  getNextDelay: (action, elapsed) => getTimeToNextFrame(action, elapsed, manifest),
+  draw: (action, frameIndex, now) => {
+    draw(action, frameIndex);
+    // Keep the working indicator visibly active without an independent CSS
+    // animation that would wake Chromium's compositor at monitor refresh rate.
+    const spinnerStep = Math.floor(now / 160) % 8;
+    document.documentElement.style.setProperty("--status-spin-angle", `${spinnerStep * 45}deg`);
+  }
+});
+
 function playOneShot(action) {
   animationState = triggerOneShot(animationState, action, performance.now(), getActionDurationMs(action, manifest));
+  animationTimer.wake();
 }
 
 // --- Pointer interaction (click vs drag distinction lives in the controller) ---
@@ -220,6 +228,7 @@ canvas.addEventListener("pointermove", (event) => {
   const result = controller.pointerMove({ x: event.clientX, y: event.clientY, time: performance.now() });
   if (result?.type === "drag") {
     animationState = setDragAction(animationState, result.direction);
+    animationTimer.wake();
     applyPetPosition({ x: event.clientX - dragOffset.x, y: event.clientY - dragOffset.y });
   }
 });
@@ -236,6 +245,7 @@ canvas.addEventListener("pointerup", (event) => {
   const result = controller.pointerUp({ x: event.clientX, y: event.clientY, time: performance.now() });
   if (result?.type === "drag-end") {
     animationState = clearDragAction(animationState);
+    animationTimer.wake();
     bridge?.savePetPosition?.(petLocal);
   }
   refreshMouseIgnore(event.clientX, event.clientY);
@@ -244,6 +254,7 @@ canvas.addEventListener("pointerup", (event) => {
 canvas.addEventListener("pointercancel", () => {
   petPressed = false;
   animationState = clearDragAction(animationState);
+  animationTimer.wake();
 });
 
 // Right-click the pet to open the same menu as the tray icon. The native menu is
@@ -332,6 +343,7 @@ function applySessions(payload) {
   }
 
   animationState = setStableAction(animationState, stableAction);
+  animationTimer.wake();
   refreshMouseIgnore(lastPointer.x, lastPointer.y);
 }
 
@@ -511,6 +523,18 @@ window.addEventListener("mouseout", (event) => {
 });
 window.addEventListener("blur", clearOverlayHover);
 
+// BrowserWindow.hide() normally throttles requestAnimationFrame automatically;
+// this renderer uses a low-frequency timer now, so suspend it explicitly while
+// hidden and force one fresh frame when the overlay becomes visible again.
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    animationTimer.stop();
+  } else {
+    animationTimer.invalidate();
+    animationTimer.start();
+  }
+});
+
 if (bridge) {
   bridge.setMouseIgnore?.(true);
   bridge.onConfig(setupPet);
@@ -520,4 +544,4 @@ if (bridge) {
   scheduleOverlayShape();
 }
 
-requestAnimationFrame(frameLoop);
+animationTimer.start();

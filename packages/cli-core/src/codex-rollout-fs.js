@@ -9,7 +9,38 @@ import { join } from "node:path";
 // reviewer's full base instructions (~10 KB observed); leave generous headroom.
 const FIRST_LINE_MAX_BYTES = 262_144;
 
-export function listJsonlFiles(root) {
+export function listJsonlFiles(root, options = {}) {
+  return walkJsonlFiles(root, options.readdir ?? readdirSync);
+}
+
+// Linked production watchers already know their main rollout, so guardian
+// discovery only needs date folders where a new guardian trunk can be created
+// during this run. Avoid walking years of Codex history on every poll. The
+// generic fallback preserves tests and custom roots that do not use Codex's
+// YYYY/MM/DD layout.
+export function listRecentJsonlFiles(root, options = {}) {
+  const minTimestampMs = Number(options.minTimestampMs);
+  if (!Number.isFinite(minTimestampMs) || minTimestampMs <= 0) {
+    return listJsonlFiles(root, options);
+  }
+
+  const readdir = options.readdir ?? readdirSync;
+  const nowValue = typeof options.now === "function" ? options.now() : Date.now();
+  const nowMs = Number.isFinite(nowValue) ? nowValue : Date.now();
+  const rootEntries = safeReadDir(root, readdir);
+  const calendarLayout = rootEntries.some((entry) => entry.isDirectory() && /^\d{4}$/.test(entry.name));
+  if (!calendarLayout) {
+    return walkJsonlFiles(root, readdir);
+  }
+
+  const files = [];
+  for (const parts of recentDateParts(minTimestampMs, nowMs)) {
+    files.push(...walkJsonlFiles(join(root, parts.year, parts.month, parts.day), readdir));
+  }
+  return files;
+}
+
+function walkJsonlFiles(root, readdir) {
   const files = [];
   if (!root || !existsSync(root)) {
     return files;
@@ -20,7 +51,7 @@ export function listJsonlFiles(root) {
     const dir = stack.pop();
     let entries;
     try {
-      entries = readdirSync(dir, { withFileTypes: true });
+      entries = readdir(dir, { withFileTypes: true });
     } catch {
       continue;
     }
@@ -36,6 +67,38 @@ export function listJsonlFiles(root) {
   }
 
   return files;
+}
+
+function safeReadDir(path, readdir) {
+  try {
+    return readdir(path, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+}
+
+function recentDateParts(minTimestampMs, nowMs) {
+  const DAY_MS = 86_400_000;
+  const timestamps = [minTimestampMs, nowMs];
+  const keys = new Map();
+
+  for (const timestamp of timestamps) {
+    for (const offset of [-DAY_MS, 0, DAY_MS]) {
+      const date = new Date(timestamp + offset);
+      addDateParts(keys, date.getFullYear(), date.getMonth() + 1, date.getDate());
+      addDateParts(keys, date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate());
+    }
+  }
+  return [...keys.values()];
+}
+
+function addDateParts(target, year, month, day) {
+  const parts = {
+    year: String(year).padStart(4, "0"),
+    month: String(month).padStart(2, "0"),
+    day: String(day).padStart(2, "0")
+  };
+  target.set(`${parts.year}/${parts.month}/${parts.day}`, parts);
 }
 
 export function safeSize(path) {

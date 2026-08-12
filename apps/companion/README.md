@@ -79,6 +79,8 @@ so the companion starts with your last selected pet.
 
 - The overlay never steals focus (`focusable: false` on supported platforms) and
   is click-through except over the pet and bubbles.
+- Pet and working-status animation share the pet manifest's frame cadence rather
+  than redrawing at monitor refresh rate, and stop while the window is hidden.
 - On Windows, the pet's right-click menu is owned by the existing tray icon, not
   the overlay. Outside clicks dismiss the native menu without making the pet
   window focusable or visible in the taskbar.

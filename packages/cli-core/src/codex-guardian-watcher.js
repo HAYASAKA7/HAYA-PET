@@ -13,7 +13,14 @@ import {
   classifyCodexSessionMeta,
   parseGuardianTranscriptLines
 } from "../../adapters/src/codex-guardian.js";
-import { listJsonlFiles, readFirstLine, readRange, safeMtime, safeSize } from "./codex-rollout-fs.js";
+import {
+  listJsonlFiles,
+  listRecentJsonlFiles,
+  readFirstLine,
+  readRange,
+  safeMtime,
+  safeSize
+} from "./codex-rollout-fs.js";
 import { readSessionTranscriptLink } from "./session-transcript-link.js";
 
 const DEFAULT_POLL_MS = 700;
@@ -113,7 +120,10 @@ export function watchCodexGuardianReviews(options = {}) {
     let newestMain;
     let newestTrunk;
 
-    for (const file of listJsonlFiles(root)) {
+    const files = useLink
+      ? listRecentJsonlFiles(root, { minTimestampMs: minMtime })
+      : listJsonlFiles(root);
+    for (const file of files) {
       const mtime = safeMtime(file);
       if (mtime < minMtime) {
         continue;
