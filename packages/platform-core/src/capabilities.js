@@ -11,6 +11,7 @@ export function getPlatformCapabilities(options = {}) {
       transparentOverlay: "required",
       terminalAttachment: "best-effort",
       displayManagement: "required",
+      mouseMoveForwarding: "required",
       fallbackMode: "none"
     };
   }
@@ -22,6 +23,7 @@ export function getPlatformCapabilities(options = {}) {
       transparentOverlay: "required",
       terminalAttachment: "best-effort",
       displayManagement: "required",
+      mouseMoveForwarding: "required",
       fallbackMode: "none"
     };
   }
@@ -34,6 +36,7 @@ export function getPlatformCapabilities(options = {}) {
       transparentOverlay: isWayland ? "best-effort" : "required",
       terminalAttachment: isWayland ? "fallback" : "best-effort",
       displayManagement: "required",
+      mouseMoveForwarding: "unsupported",
       fallbackMode: isWayland ? "wayland-cluster" : "none"
     };
   }
@@ -44,6 +47,7 @@ export function getPlatformCapabilities(options = {}) {
     transparentOverlay: "fallback",
     terminalAttachment: "fallback",
     displayManagement: "fallback",
+    mouseMoveForwarding: "unsupported",
     fallbackMode: "normal-window"
   };
 }
